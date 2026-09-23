@@ -1,0 +1,14 @@
+# Normalise line endings so six people on different machines do not fight
+# over whitespace-only diffs.
+* text=auto eol=lf
+
+# Binary and generated artifacts
+*.pcap binary
+*.pcapng binary
+*.der binary
+*.joblib binary
+
+# Generated - keep them out of diffs and language statistics
+schema/generated/*.json linguist-generated=true
+web/src/types/schema.ts linguist-generated=true
+examples/* linguist-generated=true

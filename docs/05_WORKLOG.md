@@ -1,0 +1,292 @@
+# 05 — Work Log
+
+Append-only. One entry per working session: date, who, what changed, what broke, what's next. This is the raw
+material for the final report and the PPT progress slide.
+
+**Entry format:**
+
+```
+## YYYY-MM-DD — <who>
+**Done:** ...
+**Blocked / broken:** ...
+**Next:** ...
+```
+
+---
+
+## 2026-09-23 — planning session (Claude + team lead)
+
+**Done:**
+- Chose SecureMailScope as the problem statement. Feasibility assessed as high for a 5-day build: the work is
+  deterministic parsing plus a thin, defensible ML layer. No GPU, no training corpus to hunt for, no research risk.
+- Decomposed the problem statement into 21 scored deliverables (D01–D21) plus 2 objective-only items (O01–O02), and
+  identified six requirements hidden in the wording — most importantly that "STARTTLS **validation**" is ten
+  distinct checks, and that "reconstruction" appears twice and means *render it on screen*.
+- Wrote the traceability matrix mapping every deliverable to a pipeline stage and to the screen where a judge can
+  see it. This doubles as the pre-demo checklist.
+- Read the dataset guidance (synthetic; IMAPS/POP3S/SMTPS). Two conclusions: the brief names only implicit-TLS
+  ports, so STARTTLS coverage is a competitive gap we should exploit (ADR-0008); and owning synthetic ground truth
+  lets us report measured precision and recall, which became USP-07.
+- Defined the USP set: 7 Tier-1 (build), 4 Tier-2 (build if on schedule), 4 Tier-3 (roadmap slide).
+- Defined the 12-stage pipeline (S0–S11), the 10-object data model, technology choices and per-person ownership.
+- Recorded 8 architecture decisions (ADR-0001 to ADR-0008).
+- Set up the documentation system in `docs/`.
+
+**Blocked / broken:** Nothing yet. The known environmental risk is Windows Smart App Control blocking Python
+packages, as it did on the team's previous project — mitigated by ADR-0001 (develop in WSL2).
+
+**Next:**
+1. WSL2 setup on every machine (one hour, do it first).
+2. Freeze the schema: Pydantic models in `schema/`, export JSON Schema, hand-write ~12 fixtures.
+3. Build the testbed (`docker-compose`) and generate the first captures.
+4. Repo scaffold for all twelve stages so six people can start in parallel.
+
+---
+
+## 2026-09-23 (later) — scaffold built
+
+**Done:**
+- `schema/` frozen and working: 10 objects, 15 enums, `Evidence` on every object (ADR-0004). Zero dependencies
+  (ADR-0009) — `python -c "import schema"` works on a bare Python 3.11 with nothing installed.
+- `python -m schema.jsonschema` generates JSON Schema for the 5 top-level models **and**
+  `web/src/types/schema.ts` (23 TypeScript interfaces), so the frontend never hand-writes types that drift.
+- `fixtures/report.sample.json` (239 KB): 12 sessions, 8 hosts, 17 findings, fleet grade D. Plus one file per
+  session for focused component work. The frontend, reporting and ML people are unblocked as of now.
+- `securemailscope/` skeleton: 24 modules across all twelve stages, each carrying the implementation notes that
+  matter — the TLS 1.3 `supported_versions` trap, the encrypted-Certificate-message limitation, GREASE stripping
+  before JA3, the capability-mangling heuristic.
+- **USP-01 implemented for real**: `proto/roles.py` + `rules/severity.py`. A declarative policy table with
+  `steps` / `cap` / `floor` that writes its own plain-English justification into every adjusted finding.
+- `testbed/manifest.json`: 18 captures with full ground truth and expected findings — 7 healthy, 4 degraded,
+  7 compromised; 9 implicit TLS, 6 STARTTLS, 3 cleartext; 15 rules under test. Plus `make_certs.sh` for the four
+  certificate scenarios.
+- 22 contract tests, all passing. Runnable as plain `python tests/test_contract.py` with no pytest installed,
+  which matters before anyone has an environment.
+
+**Found and fixed:** the first version of the severity policy downgraded *every* certificate finding on port 25,
+which would also have excused a 1024-bit key and a SHA-1 signature there. A test caught it. Split into
+`CERTIFICATE` (trust, role-adjusted) and `CERTIFICATE_STRENGTH` (never adjusted) — ADR-0010. Worth knowing,
+because a judge asking "so your tool ignores weak keys on port 25?" would have been right.
+
+**Blocked / broken:**
+- **WSL is not installed on the dev machine.** `wsl --install` needs admin rights and a reboot, so it is the
+  team's action. Until then only the zero-dependency parts run on Windows — which, by design, is the entire
+  schema, the fixture generator and the whole test suite.
+- No pip packages installed yet: no `dpkt`, `cryptography`, `scikit-learn`, `fastapi`.
+
+**Next:**
+1. `wsl --install`, reboot, then `pip install -e ".[parse,ml,serve,dev]"` inside WSL.
+2. Person A: S0/S1 — ingest and reassembly, with byte-to-frame provenance from the first commit.
+3. Person C: `ml/train.py` — the synthetic corpus needs no parser (ADR-0006), so this can start today.
+4. Persons E/F: `npx create-next-app web/`, pointed at `fixtures/report.sample.json`.
+5. Testbed: run `make_certs.sh`, then write `docker-compose.yml`.
+
+---
+
+## 2026-09-23 (evening) — S6 rule pack and S8 AI layer
+
+**Done:**
+- **S6 rule pack**: 33 rules across protocol, cipher, key exchange, certificate trust, certificate strength,
+  STARTTLS, attack evidence, configuration and post-quantum. Every rule carries its standards citations and its
+  remediation config snippets inline, enforced by a test.
+- Rules are predicates over a `FeatureVector`, so the *same* code labels the ML corpus and analyses real sessions
+  (ADR-0003). The oracle can never drift from the shipping detector.
+- **S8 layer 1** `ml/classifier.py`: two backends, trained model or rule-derived baseline (ADR-0011), plus
+  `humanise()` so the waterfall reads "RC4 cipher suite negotiated" rather than `cipher_is_rc4 = 1.0`.
+- **S8 layer 2** `ml/anomaly.py`: JA3/JA3S rarity plus peer deviation from the fleet's modal configuration.
+  Isolation Forest when sklearn exists; explainable either way.
+- **S8 layer 3** `ml/priority.py`: D18 as distinct code from D16 — severity leads, then exploitability, blast
+  radius and breadth, with a written rationale for every position. Plus `remediation_batches()` for the admin view.
+- **Corpus generator** `ml/corpus.py`: archetype-first sampling so weak settings correlate the way they do in
+  reality. 10,000 labelled vectors in 0.3s, pure stdlib, CSV export so training can happen on any machine.
+- `ml/train.py`: gradient boosting over 5 severity classes plus an Isolation Forest fitted on the healthy majority
+  only. Compares itself against the baseline and warns if it does not win.
+- `scripts/demo_analysis.py`: runs S6→S8 over the fixture fleet and prints the demo in the order we will tell it.
+- 31 new tests. 53 passing in total.
+
+**Found and fixed — three bugs, all the same class:** citing a standard is not the same as violating it. RFC 7435
+(justifies the relay downgrade), RFC 8461 and RFC 7672 (mechanisms we *recommend*) and RFC 8446 (which the server
+actually complied with) were all being reported as compliance failures. Added `StandardRef.relation`; the
+compliance report now counts only `violates`. Failures went from 14 of 17 to 11 of 17, and every remaining one is a
+genuine MUST violation. Worth catching before a judge did.
+
+**Blocked:**
+- **Confirmed: Smart App Control blocks numpy on this machine** (ADR-0012). `pip install` succeeds, `import numpy`
+  fails with "An Application Control policy has blocked this file". WSL2 is now mandatory, not advisory.
+- Consequence: `ml/train.py` cannot run here. Everything else in S6–S8 runs and is tested, because the rule pack,
+  the corpus generator and the baseline scorer are all pure stdlib.
+
+**Next:**
+1. `wsl --install -d Ubuntu-22.04`, reboot, `pip install -e ".[parse,ml,serve,dev]"`, then
+   `python -m securemailscope.ml.train` — it should take about two minutes and produce the metrics slide numbers.
+2. Person A: S0/S1, the last big unbuilt piece.
+3. Persons E/F: the dashboard now has real scored data to render — `python scripts/demo_analysis.py` shows
+   exactly what the screens need to show.
+
+---
+
+## 2026-09-23 (night) — S0-S3 and the first real end-to-end run
+
+**Done:**
+- Discovered `dpkt` is pure Python, so Smart App Control does **not** block it. That unlocked the whole parsing
+  path on Windows, well ahead of schedule.
+- `testbed/synth.py` (ADR-0013): writes PCAPs byte by byte — Ethernet/IPv4/TCP with correct checksums, plus
+  hand-built TLS ClientHello, ServerHello, Certificate and ChangeCipherSpec records. Seven scenarios, no Docker.
+- **S0** `capture/ingest.py`: streaming SHA-256, format detection from the magic number, 1-based frame numbers
+  matching Wireshark so evidence references are typeable into a display filter.
+- **S1** `capture/reassemble.py`: TCP reassembly handling out-of-order segments, retransmissions, partial overlaps
+  and gaps, with byte-offset → frame provenance recorded as it goes (ADR-0004). Gaps are recorded, never filled
+  with invented bytes.
+- **S2** `proto/detect.py`: banner-led protocol identification with the port as corroboration, graded confidence,
+  and correct handling of implicit TLS (no banner exists to read).
+- **S3** `proto/starttls.py`: the ten checks, capability-mangling detection, and credential recovery for SMTP AUTH
+  LOGIN/PLAIN, IMAP LOGIN and POP3 USER/PASS. Passwords stored redacted.
+- **S7** `features/__init__.py`: real feature extraction from a parsed session.
+- **`pipeline.py`**: PCAP in, `Report` out. S0→S3→S7→S6→S8→S9 runs end to end today.
+- `scripts/analyse.py`: the command the demo runs. With no argument it generates the corpus and analyses it, so a
+  fresh clone goes to a full report in one command.
+- 28 new tests. **81 passing in total.**
+
+**Found and fixed — three bugs, all caught by running it rather than by reading it:**
+
+1. `_TLS_RECORD` was `^`-anchored but used with `.search()`, so **every STARTTLS session was reported as
+   cleartext**. Split into anchored and unanchored patterns with a comment explaining why both exist.
+2. `STARTTLS-ADVERTISED-NOT-USED` fired at HIGH on port 25, where the client is a remote peer MTA outside this
+   organisation's control and `SMTP-RELAY-NO-TLS` already covers it. That is precisely the false positive USP-01
+   exists to prevent, occurring inside our own rule pack.
+3. Four hosts scored **A+ with zero findings** because S4 does not exist yet — they had not been assessed at all.
+   Fixed with ADR-0014: a coverage rule, a summary sentence, and `Grade.INCOMPLETE`.
+
+**Spec correction:** V7 (EHLO re-issued after TLS) is **not passively observable** when the upgrade succeeds — the
+re-issued EHLO is inside the encrypted channel. It now reports as not-applicable in that case. Nine of the ten
+checks are fully passive; the tenth is conditional. Documented in `01_PROBLEM_STATEMENT.md` section 3.1.
+
+**Still blocked:** scikit-learn and `cryptography` need WSL2 (ADR-0012). `cryptography` is a Rust extension, so S5
+(X.509) will be blocked the same way numpy was — S4 (handshake parsing) is pure byte work and is not.
+
+**Next:**
+1. **S4 — TLS handshake parsing.** The single highest-value remaining piece: it turns the four "?" hosts into real
+   grades and switches on roughly half the rule pack. Pure stdlib, so it can be built here. Mind the
+   `supported_versions` trap; the synthetic corpus already contains a TLS 1.3 ServerHello that exercises it.
+2. S5 X.509 — needs WSL, or a small DER parser if WSL keeps slipping.
+3. Frontend: `out/report.json` is now a real analysed report, not a fixture.
+
+---
+
+## 2026-09-23 (late) — S4 TLS handshake parsing
+
+**Done:**
+- `tls/ciphers.py`: suite and named-group tables with properties **derived from IANA names** (ADR-0015), plus the
+  hybrid post-quantum groups for USP-05.
+- `tls/records.py`: record layer with stream offsets, handshake messages re-joined across records, alert decoding,
+  and passive handshake-completion detection via ChangeCipherSpec / application data.
+- `tls/handshake.py`: ClientHello and ServerHello parsing. **The TLS 1.3 trap is handled** — negotiated version
+  comes from `supported_versions`, not `legacy_version`. Also extracts the RFC 8446 DOWNGRD sentinel,
+  TLS_FALLBACK_SCSV, supported groups and the full client cipher list.
+- `tls/fingerprint.py`: JA3 / JA3S with GREASE stripped before hashing.
+- `tls/__init__.attach()`: the stage entry point, wired into `pipeline.py`.
+- **Cipher intersection anomaly** (USP-02) now works: it compares what the server *could* have chosen against what
+  it did, which no rule looking only at the negotiated suite can see. Conservative by design (ADR-0016).
+- 34 new tests. **114 passing in total.**
+
+**Now firing end to end from a real PCAP:** deprecated version, RC4, 3DES, NULL/anon, export, CBC, weak strength,
+no forward secrecy, weak DH group, downgrade sentinel, intersection anomaly, missing renegotiation_info,
+compression, missing SNI, post-quantum readiness.
+
+**Found and fixed:**
+1. A bug in my own *test data*, not the parser: the downgrade scenario passed a version number (0x0303) where a
+   cipher suite belongs, so S4 correctly reported `UNKNOWN_CIPHER_SUITE_0x0303`. Now uses 0x009D
+   (`TLS_RSA_WITH_AES_256_GCM_SHA384`), which also makes the session a genuine forward-secrecy downgrade and gives
+   the intersection anomaly something real to catch.
+2. **A capture that starts mid-session was classified as cleartext.** Rewriting a stale test surfaced it: when
+   recording begins after the handshake, the first bytes are protected application data and there is no
+   ClientHello. That is a normal forensic situation and calling it cleartext would be a serious misreport. Now
+   detected as encrypted-but-uninspectable, with a new `imaps_mid_session` scenario pinning it.
+3. Grammar in the executive summary — "1 encrypted session ... so their scores". User-facing text on the one line
+   a decision-maker reads.
+
+**Still blocked:** S5 (X.509) needs `cryptography`, a Rust extension, so it will be blocked the same way numpy was
+until WSL2 exists. Everything else now runs on stock Windows Python plus `dpkt`.
+
+**Next:**
+1. **S5 X.509** — the last parsing stage. Needs WSL, or a ~200-line DER parser if WSL keeps slipping. Until it
+   lands, the seven CERT-* rules cannot fire and certificate deliverables D08–D12 are unmet.
+2. **S10 report export** (JSON done; HTML and PDF pending) and the FastAPI service.
+3. **Frontend** — `out/report.json` is a real analysed report with handshakes, fingerprints and findings.
+
+---
+
+## 2026-09-24 (early) — S5 certificates: the last parsing stage
+
+**Done:**
+- Tested `cryptography` properly instead of trusting the import: `import cryptography` succeeds but
+  `from cryptography import x509` fails, because Smart App Control blocks its Rust extension. `openssl` is blocked
+  too. So S5 went pure Python (ADR-0017).
+- `testbed/certgen.py`: RSA key generation (Miller-Rabin), PKCS#1 v1.5 signing, a DER builder and the four
+  certificate scenarios from `manifest.json`. Real signatures, 3 seconds to generate the whole set.
+- `certs/der.py`: minimal DER reader with bounds checking, OID decoding, the RFC 5280 UTCTime year pivot, and
+  RFC 5280 name matching.
+- `certs/extract.py`: subject, issuer, serial, validity, public key algorithm **and size**, signature algorithm,
+  SANs, key usage, basicConstraints, SHA-256 fingerprint. D08, D10, D11, D12.
+- `certs/chain.py`: ordering, completeness, expiry, hostname matching with correct wildcard semantics, and **real
+  RSA signature verification** with the full padding check — a verifier that just looks for the digest somewhere
+  in the recovered block accepts forgeries. D09.
+- `certs/__init__.attach()`: the stage entry point, plus certificate-substitution detection across sessions
+  (USP-02).
+- Two new capture scenarios with observable TLS 1.2 chains, and the existing ones now carry real certificates.
+- 32 new tests. **149 passing in total.**
+
+**Found and fixed:** an element declaring 65535 bytes with none present parsed "successfully" with an empty value.
+A certificate truncated by a capture that stopped mid-transfer would have read as a certificate that simply has no
+extensions — and "no subjectAltName" is a finding, while "we only received half of this" is not. `Element` now
+carries `declared_length` and a `truncated` flag, and `parse_all` stops at a short element rather than misreading
+whatever follows.
+
+**Deliverable status: 20 of 21 met.** D01–D19 and both objectives (O01, O02) are implemented and tested from PCAP
+bytes. D20 is partial — JSON export works, HTML and PDF are pending. D21 (the dashboard) has not started.
+
+**Next:**
+1. **S10 exports** — HTML via Jinja2, PDF via Playwright (ADR-0007), and the four persona views (USP-06).
+2. **FastAPI service** so the dashboard has something to call.
+3. **The dashboard (D21)** — the largest remaining piece and the one judges see first. `out/report.json` is now a
+   complete analysed report: handshakes, certificates, fingerprints, findings, scores and evidence references.
+4. WSL2 remains needed only for `ml/train.py` — the rule-derived baseline covers D16/D17/D18 in the meantime.
+
+---
+
+## 2026-09-24 (mid) — S10 exports and the dashboard
+
+**Done:**
+- `securemailscope/report/`: JSON, HTML and PDF from one `Report` object, so the three can never disagree.
+- The HTML is **one self-contained file** — CSS, script and data inlined, no CDN, no fonts, no build step
+  (ADR-0018). Verified: zero external references in the markup.
+- It is also the dashboard (D21): posture grade, executive summary, fleet table, filterable triage queue with
+  expandable findings, per-session cards with the handshake ladder (D04), the ten STARTTLS checks (D02), the
+  certificate chain (D08–D12), the risk waterfall (D16), anomaly reasons (D17), the feature vector (O01), the
+  compliance report card (USP-08) and a USP-01 side-by-side panel that builds itself from whichever rule produced
+  opposite verdicts.
+- Four persona views (USP-06): SOC triage, forensics evidence packet, an IR **timeline** and an administrator
+  view grouped by fix rather than by finding. All four share one analysis, which a test enforces.
+- Dark by default with a light theme for printing; `@media print` rules so Print to PDF produces the same document.
+- `scripts/analyse.py --out DIR` writes everything.
+- 19 new tests. **168 passing in total.**
+
+**Verification note, stated honestly:** the preview pane renders local pages as static snapshots, so I could not
+get a reliable *visual* check of the design. I verified it structurally instead — served the file over HTTP and
+confirmed via the DOM that the page is 3779px tall at 1265px wide with 25 findings, 10 session cards and 17
+compliance rows all rendering correctly. **Someone should open `out/report.html` in a real browser and look at
+it**, because layout polish is not something I have confirmed.
+
+**Two tests I had to correct rather than the code:** both asserted the wrong property. RFC URLs and any injected
+markup legitimately appear inside the JSON data island — that element is `type="application/json"`, the browser
+does not execute it, and every value is escaped on render. The meaningful assertion is that they never reach the
+document *markup*, which is what the tests now check.
+
+**Deliverable status: 21 of 21 implemented.** D20 covers JSON and HTML with PDF degrading cleanly when Playwright
+is absent; D21 is the interactive HTML dashboard.
+
+**Next:**
+1. **Open the report in a browser and polish the design.** The one thing I could not verify.
+2. The FastAPI service, so a PCAP can be uploaded rather than passed on the command line.
+3. WSL2 for `ml/train.py` and Playwright — the last two blocked pieces.
+4. The Docker testbed for real captures alongside the synthetic corpus.

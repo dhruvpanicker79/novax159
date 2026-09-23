@@ -1,0 +1,63 @@
+{
+  "type": "object",
+  "title": "Capture",
+  "description": "The source artifact. Stage S0.",
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "sha256": {
+      "type": "string"
+    },
+    "size_bytes": {
+      "type": "integer"
+    },
+    "packet_count": {
+      "type": "integer"
+    },
+    "first_packet_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "last_packet_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "link_type": {
+      "type": "string"
+    },
+    "analysed_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tool_version": {
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securemailscope/schema/Capture.json"
+}

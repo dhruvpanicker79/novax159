@@ -1,0 +1,281 @@
+{
+  "_comment": [
+    "Ground-truth manifest for the capture corpus. This file IS USP-07.",
+    "",
+    "The PS dataset guidance says 'synthetic - generate your own captures'. Most",
+    "teams will read that as a chore. It is actually permission to own the",
+    "ground truth, which is what lets us answer 'how do you know it works?'",
+    "with measured precision and recall instead of a shrug.",
+    "",
+    "Each entry states exactly what was configured. scripts/evaluate.py runs the",
+    "pipeline over the generated captures and scores our findings against",
+    "expected_findings. Add a case here, regenerate, and the metrics update.",
+    "",
+    "Note the port coverage: the PS names only IMAPS/POP3S/SMTPS (implicit TLS).",
+    "We also cover STARTTLS on 25/587/143/110, which D02 requires and which",
+    "teams following the dataset hint literally will not have. See ADR-0008."
+  ],
+
+  "tiers": {
+    "healthy": "TLS 1.3 or 1.2 with ECDHE and AEAD, valid chain, key >= 2048 or P-256",
+    "degraded": "TLS 1.2 with CBC, 1024-bit RSA, SHA-1 signature, certificate expiring soon",
+    "compromised": "TLS 1.0/1.1 with RC4 or 3DES, expired self-signed certificate, STARTTLS stripped"
+  },
+
+  "certificates": {
+    "valid": {
+      "cn": "mail-healthy.test",
+      "key_algorithm": "ecdsa", "key_bits": 256,
+      "signature_algorithm": "sha256WithECDSA",
+      "days_valid": 90, "self_signed": false, "chain_complete": true
+    },
+    "expiring": {
+      "cn": "mail-degraded.test",
+      "key_algorithm": "rsa", "key_bits": 1024,
+      "signature_algorithm": "sha1WithRSA",
+      "days_valid": 9, "self_signed": false, "chain_complete": true
+    },
+    "expired_selfsigned": {
+      "cn": "mail-compromised.test",
+      "key_algorithm": "rsa", "key_bits": 2048,
+      "signature_algorithm": "sha256WithRSA",
+      "days_valid": -47, "self_signed": true, "chain_complete": false
+    },
+    "missing_intermediate": {
+      "cn": "mail-partial.test",
+      "key_algorithm": "rsa", "key_bits": 2048,
+      "signature_algorithm": "sha256WithRSA",
+      "days_valid": 90, "self_signed": false, "chain_complete": false
+    }
+  },
+
+  "captures": [
+    {
+      "name": "smtps_465_healthy",
+      "protocol": "smtp", "port": 465, "tls_mode": "implicit", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.3", "cipher": "TLS_AES_256_GCM_SHA384",
+        "key_exchange": "tls13_ephemeral", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "submission",
+        "pq_groups_offered": []
+      },
+      "expected_findings": ["PQ-NOT-READY"]
+    },
+    {
+      "name": "imaps_993_healthy",
+      "protocol": "imap", "port": 993, "tls_mode": "implicit", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.3", "cipher": "TLS_AES_128_GCM_SHA256",
+        "key_exchange": "tls13_ephemeral", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "mail_access",
+        "pq_groups_offered": ["X25519MLKEM768"]
+      },
+      "expected_findings": []
+    },
+    {
+      "name": "pop3s_995_healthy",
+      "protocol": "pop3", "port": 995, "tls_mode": "implicit", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "ECDHE-RSA-CHACHA20-POLY1305",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "mail_access"
+      },
+      "expected_findings": ["PQ-NOT-READY"]
+    },
+    {
+      "name": "smtp_587_starttls_healthy",
+      "protocol": "smtp", "port": 587, "tls_mode": "starttls", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "ECDHE-RSA-AES256-GCM-SHA384",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "submission",
+        "starttls": {
+          "v1_advertised": true, "v2_capability_mangled": false,
+          "v3_client_issued": true, "v4_server_accepted": true,
+          "v5_clienthello_followed": true, "v6_handshake_completed": true,
+          "v7_ehlo_reissued": true, "v8_auth_offered_before_tls": false,
+          "v9_credentials_before_tls": false, "v10_command_injection": false
+        }
+      },
+      "expected_findings": ["PQ-NOT-READY"]
+    },
+    {
+      "name": "imap_143_starttls_healthy",
+      "protocol": "imap", "port": 143, "tls_mode": "starttls", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.3", "cipher": "TLS_AES_256_GCM_SHA384",
+        "key_exchange": "tls13_ephemeral", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "mail_access"
+      },
+      "expected_findings": ["PQ-NOT-READY"]
+    },
+    {
+      "name": "pop3_110_starttls_healthy",
+      "protocol": "pop3", "port": 110, "tls_mode": "starttls", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "mail_access"
+      },
+      "expected_findings": ["PQ-NOT-READY"]
+    },
+
+    {
+      "name": "imaps_993_degraded",
+      "protocol": "imap", "port": 993, "tls_mode": "implicit", "tier": "degraded",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "ECDHE-RSA-AES128-SHA",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "expiring", "port_role": "mail_access"
+      },
+      "expected_findings": [
+        "CERT-WEAK-KEY", "CERT-WEAK-SIGNATURE", "CERT-EXPIRING-SOON",
+        "TLS-CBC-CIPHER", "PQ-NOT-READY"
+      ]
+    },
+    {
+      "name": "smtp_587_starttls_degraded",
+      "protocol": "smtp", "port": 587, "tls_mode": "starttls", "tier": "degraded",
+      "truth": {
+        "tls_version": "tls1.1", "cipher": "ECDHE-RSA-AES128-SHA",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "expiring", "port_role": "submission"
+      },
+      "expected_findings": [
+        "TLS-DEPRECATED-VERSION", "CERT-WEAK-KEY", "CERT-WEAK-SIGNATURE",
+        "CERT-EXPIRING-SOON", "TLS-CBC-CIPHER", "PQ-NOT-READY"
+      ]
+    },
+    {
+      "name": "pop3s_995_degraded_no_pfs",
+      "protocol": "pop3", "port": 995, "tls_mode": "implicit", "tier": "degraded",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "AES128-GCM-SHA256",
+        "key_exchange": "rsa", "forward_secrecy": false,
+        "certificate": "valid", "port_role": "mail_access"
+      },
+      "expected_findings": ["TLS-NO-FORWARD-SECRECY", "PQ-NOT-READY"]
+    },
+    {
+      "name": "imaps_993_missing_intermediate",
+      "protocol": "imap", "port": 993, "tls_mode": "implicit", "tier": "degraded",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "ECDHE-RSA-AES256-GCM-SHA384",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "missing_intermediate", "port_role": "mail_access"
+      },
+      "expected_findings": ["CERT-CHAIN-INCOMPLETE", "PQ-NOT-READY"]
+    },
+
+    {
+      "name": "imaps_993_compromised_rc4",
+      "protocol": "imap", "port": 993, "tls_mode": "implicit", "tier": "compromised",
+      "truth": {
+        "tls_version": "tls1.0", "cipher": "RC4-SHA",
+        "key_exchange": "rsa", "forward_secrecy": false,
+        "certificate": "expired_selfsigned", "port_role": "mail_access"
+      },
+      "expected_findings": [
+        "TLS-DEPRECATED-VERSION", "TLS-WEAK-CIPHER", "TLS-NO-FORWARD-SECRECY",
+        "CERT-EXPIRED-SELF-SIGNED", "PQ-NOT-READY"
+      ],
+      "expected_severity": {"CERT-EXPIRED-SELF-SIGNED": "critical"},
+      "note": "USP-01 half one: the credential-bearing port. Same certificate as smtp_25_relay_expired_cert."
+    },
+    {
+      "name": "smtp_25_relay_expired_cert",
+      "protocol": "smtp", "port": 25, "tls_mode": "starttls", "tier": "compromised",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "ECDHE-RSA-AES128-GCM-SHA256",
+        "key_exchange": "ecdhe", "forward_secrecy": true,
+        "certificate": "expired_selfsigned", "port_role": "mta_relay"
+      },
+      "expected_findings": ["CERT-EXPIRED-SELF-SIGNED", "PQ-NOT-READY"],
+      "expected_severity": {"CERT-EXPIRED-SELF-SIGNED": "info"},
+      "note": "USP-01 half two: IDENTICAL certificate, opportunistic relay. The demo puts these two side by side."
+    },
+    {
+      "name": "smtp_587_starttls_stripped",
+      "protocol": "smtp", "port": 587, "tls_mode": "cleartext", "tier": "compromised",
+      "truth": {
+        "tls_version": null, "cipher": null, "certificate": null,
+        "port_role": "submission",
+        "starttls": {
+          "v1_advertised": false, "v2_capability_mangled": true,
+          "v3_client_issued": false, "v5_clienthello_followed": false,
+          "v6_handshake_completed": false, "v8_auth_offered_before_tls": true,
+          "v9_credentials_before_tls": true
+        },
+        "credentials_exposed": true,
+        "mangled_capability_line": "250-XXXXXXXA"
+      },
+      "expected_findings": ["ATTACK-STARTTLS-STRIPPED", "ATTACK-CLEARTEXT-CREDENTIALS"],
+      "expected_severity": {
+        "ATTACK-STARTTLS-STRIPPED": "critical",
+        "ATTACK-CLEARTEXT-CREDENTIALS": "critical"
+      },
+      "note": "The demo's emotional peak. A proxy rewrites the capability keyword in place, preserving length."
+    },
+    {
+      "name": "imap_143_advertised_not_used",
+      "protocol": "imap", "port": 143, "tls_mode": "cleartext", "tier": "compromised",
+      "truth": {
+        "tls_version": null, "port_role": "mail_access",
+        "starttls": {
+          "v1_advertised": true, "v2_capability_mangled": false,
+          "v3_client_issued": false, "v9_credentials_before_tls": true
+        },
+        "credentials_exposed": true
+      },
+      "expected_findings": ["STARTTLS-ADVERTISED-NOT-USED", "ATTACK-CLEARTEXT-CREDENTIALS"]
+    },
+    {
+      "name": "smtp_25_relay_cleartext",
+      "protocol": "smtp", "port": 25, "tls_mode": "cleartext", "tier": "compromised",
+      "truth": {"tls_version": null, "port_role": "mta_relay", "credentials_exposed": false},
+      "expected_findings": ["SMTP-RELAY-NO-TLS"],
+      "expected_severity": {"SMTP-RELAY-NO-TLS": "low"},
+      "note": "Negative control for USP-01: cleartext relay is NOT a critical finding. A tool that screams here is the tool analysts learn to ignore."
+    },
+    {
+      "name": "imaps_993_downgrade_sentinel",
+      "protocol": "imap", "port": 993, "tls_mode": "implicit", "tier": "compromised",
+      "truth": {
+        "tls_version": "tls1.2", "cipher": "DHE-RSA-AES256-GCM-SHA384",
+        "key_exchange": "dhe", "forward_secrecy": true,
+        "certificate": "valid", "port_role": "mail_access",
+        "downgrade_sentinel": true, "fallback_scsv": true,
+        "client_offered_tls13": true
+      },
+      "expected_findings": ["ATTACK-CIPHER-INTERSECTION-ANOMALY"],
+      "note": "Server is 1.3-capable but negotiates 1.2, setting the RFC 8446 4.1.3 DOWNGRD sentinel."
+    },
+    {
+      "name": "smtp_587_3des_sweet32",
+      "protocol": "smtp", "port": 587, "tls_mode": "starttls", "tier": "compromised",
+      "truth": {
+        "tls_version": "tls1.0", "cipher": "DES-CBC3-SHA",
+        "key_exchange": "rsa", "forward_secrecy": false,
+        "certificate": "expiring", "port_role": "submission"
+      },
+      "expected_findings": [
+        "TLS-DEPRECATED-VERSION", "TLS-WEAK-CIPHER", "TLS-NO-FORWARD-SECRECY",
+        "CERT-WEAK-KEY", "CERT-WEAK-SIGNATURE", "PQ-NOT-READY"
+      ],
+      "expected_attacks": ["Sweet32", "BEAST"]
+    },
+    {
+      "name": "imaps_993_tls13_opaque_certs",
+      "protocol": "imap", "port": 993, "tls_mode": "implicit", "tier": "healthy",
+      "truth": {
+        "tls_version": "tls1.3", "cipher": "TLS_CHACHA20_POLY1305_SHA256",
+        "key_exchange": "tls13_ephemeral", "forward_secrecy": true,
+        "certificate": "valid", "certificate_observable": false,
+        "port_role": "mail_access"
+      },
+      "expected_findings": ["PQ-NOT-READY"],
+      "expected_chain_status": "opaque_tls13",
+      "note": "Regression guard: in TLS 1.3 the Certificate message is encrypted. We must report OPAQUE_TLS13, not an empty panel and not a false 'no certificate' finding."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+[project]
+name = "securemailscope"
+version = "0.1.0"
+description = "AI-assisted passive network forensic framework for cryptographic security posture assessment of email infrastructure"
+requires-python = ">=3.10"
+
+# NOTE: the `schema` package deliberately has ZERO dependencies (stdlib only).
+# See docs/04_DECISIONS.md ADR-0009. Everyone imports the schema; nobody should
+# ever be blocked by an environment problem in it.
+dependencies = []
+
+[project.optional-dependencies]
+# Stage S0-S5: parsing
+parse = [
+    "dpkt>=1.9.8",
+    "cryptography>=42.0",
+]
+# Stage S7-S8: machine learning
+ml = [
+    "scikit-learn>=1.4",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "shap>=0.45",
+    "joblib>=1.3",
+]
+# Stage S10: API and reporting
+serve = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "playwright>=1.44",
+]
+# Development-time only. pyshark is a CROSS-CHECK ORACLE for validating our own
+# TLS parser against tshark. It is NOT a runtime dependency. See ADR-0002.
+dev = [
+    "pytest>=8.0",
+    "pyshark>=0.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["schema", "securemailscope"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+node_modules/
+.next/
+out/
+*.pcap
+*.pcapng
+!testbed/samples/*.pcap
+captures/
+reports/
+*.pkl
+*.joblib
+.env
+.DS_Store
+testbed/certs/
+testbed/out/
+models/
+
+# generated analysis artifacts
+out/
+data/
+models/
+*.joblib

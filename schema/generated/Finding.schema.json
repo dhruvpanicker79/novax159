@@ -1,0 +1,318 @@
+{
+  "type": "object",
+  "title": "Finding",
+  "description": "One detected issue. Stage S6. Deliverables D13, D14, D15.",
+  "properties": {
+    "rule_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "category": {
+      "$ref": "#/$defs/FindingCategory"
+    },
+    "base_severity": {
+      "$ref": "#/$defs/Severity"
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity"
+    },
+    "severity_adjustment_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "confidence": {
+      "$ref": "#/$defs/Confidence"
+    },
+    "affected_host": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "affected_port": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "port_role": {
+      "$ref": "#/$defs/PortRole"
+    },
+    "session_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "standards": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StandardRef"
+      }
+    },
+    "remediation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Remediation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "related_attacks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "$ref": "#/$defs/Evidence"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securemailscope/schema/Finding.json",
+  "$defs": {
+    "FindingCategory": {
+      "type": "string",
+      "enum": [
+        "protocol",
+        "cipher",
+        "key_exchange",
+        "certificate",
+        "certificate_strength",
+        "configuration",
+        "starttls",
+        "attack_evidence",
+        "post_quantum",
+        "compliance"
+      ],
+      "description": "Top-level grouping, used for the dashboard's category subscores."
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "Finding severity. Both the base and the role-adjusted value are kept."
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "confirmed"
+      ],
+      "description": "How sure we are. Forensic findings report confidence, not certainty."
+    },
+    "PortRole": {
+      "type": "string",
+      "enum": [
+        "mta_relay",
+        "submission",
+        "mail_access",
+        "unknown"
+      ],
+      "description": "What the port is *for*, which determines how harshly we judge it."
+    },
+    "StandardRef": {
+      "type": "object",
+      "title": "StandardRef",
+      "description": "A citation. Populate this when you WRITE the rule (USP-08).",
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "identifier": {
+          "type": "string"
+        },
+        "clause": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relation": {
+          "type": "string"
+        }
+      }
+    },
+    "Remediation": {
+      "type": "object",
+      "title": "Remediation",
+      "description": "What to actually do about it. Objective O02.",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "postfix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dovecot": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exchange": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effort": {
+          "type": "string"
+        },
+        "risk_of_change": {
+          "type": "string"
+        },
+        "llm_generated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Evidence": {
+      "type": "object",
+      "title": "Evidence",
+      "description": "Where in the capture this fact came from.",
+      "properties": {
+        "capture_sha256": {
+          "type": "string"
+        },
+        "stream_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "byte_range": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "type": "object",
+  "title": "FeatureVector",
+  "description": "Explicit, named, inspectable ML input. Objective O01.",
+  "properties": {
+    "tls_version_num": {
+      "type": "number"
+    },
+    "is_deprecated_version": {
+      "type": "boolean"
+    },
+    "version_downgrade_from_offered": {
+      "type": "number"
+    },
+    "cipher_strength_bits": {
+      "type": "integer"
+    },
+    "cipher_is_aead": {
+      "type": "boolean"
+    },
+    "cipher_is_cbc": {
+      "type": "boolean"
+    },
+    "cipher_is_rc4": {
+      "type": "boolean"
+    },
+    "cipher_is_3des": {
+      "type": "boolean"
+    },
+    "cipher_is_null_or_anon": {
+      "type": "boolean"
+    },
+    "cipher_is_export": {
+      "type": "boolean"
+    },
+    "kex_is_ephemeral": {
+      "type": "boolean"
+    },
+    "kex_is_anon": {
+      "type": "boolean"
+    },
+    "kex_group_bits": {
+      "type": "integer"
+    },
+    "has_forward_secrecy": {
+      "type": "boolean"
+    },
+    "pq_hybrid_offered": {
+      "type": "boolean"
+    },
+    "pq_hybrid_negotiated": {
+      "type": "boolean"
+    },
+    "cert_present": {
+      "type": "boolean"
+    },
+    "cert_opaque_tls13": {
+      "type": "boolean"
+    },
+    "cert_days_to_expiry": {
+      "type": "integer"
+    },
+    "cert_is_expired": {
+      "type": "boolean"
+    },
+    "cert_is_self_signed": {
+      "type": "boolean"
+    },
+    "cert_key_bits": {
+      "type": "integer"
+    },
+    "cert_key_is_rsa": {
+      "type": "boolean"
+    },
+    "cert_sig_is_weak": {
+      "type": "boolean"
+    },
+    "cert_chain_length": {
+      "type": "integer"
+    },
+    "cert_chain_complete": {
+      "type": "boolean"
+    },
+    "cert_hostname_match": {
+      "type": "boolean"
+    },
+    "port_role_is_relay": {
+      "type": "boolean"
+    },
+    "port_role_is_submission": {
+      "type": "boolean"
+    },
+    "port_role_is_access": {
+      "type": "boolean"
+    },
+    "tls_mode_is_implicit": {
+      "type": "boolean"
+    },
+    "tls_mode_is_starttls": {
+      "type": "boolean"
+    },
+    "tls_mode_is_cleartext": {
+      "type": "boolean"
+    },
+    "starttls_advertised": {
+      "type": "boolean"
+    },
+    "starttls_completed": {
+      "type": "boolean"
+    },
+    "starttls_ehlo_reissued": {
+      "type": "boolean"
+    },
+    "starttls_stripped_suspected": {
+      "type": "boolean"
+    },
+    "credentials_in_cleartext": {
+      "type": "boolean"
+    },
+    "auth_before_tls": {
+      "type": "boolean"
+    },
+    "downgrade_sentinel_present": {
+      "type": "boolean"
+    },
+    "fallback_scsv_present": {
+      "type": "boolean"
+    },
+    "cipher_intersection_anomaly": {
+      "type": "boolean"
+    },
+    "certificate_substitution": {
+      "type": "boolean"
+    },
+    "renegotiation_info_present": {
+      "type": "boolean"
+    },
+    "compression_enabled": {
+      "type": "boolean"
+    },
+    "sni_present": {
+      "type": "boolean"
+    },
+    "alpn_present": {
+      "type": "boolean"
+    },
+    "session_resumed": {
+      "type": "boolean"
+    },
+    "handshake_alert_count": {
+      "type": "integer"
+    },
+    "ja3_rarity": {
+      "type": "number"
+    },
+    "ja3s_rarity": {
+      "type": "number"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securemailscope/schema/FeatureVector.json"
+}

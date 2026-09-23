@@ -1,0 +1,1919 @@
+{
+  "type": "object",
+  "title": "Report",
+  "description": "Top-level export. Deliverable D20, consumed by the dashboard (D21).",
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "capture": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Capture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MailSession"
+      }
+    },
+    "hosts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HostPosture"
+      }
+    },
+    "fleet": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FleetPosture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prioritised_findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
+    "executive_summary": {
+      "type": "string"
+    },
+    "generated_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "evaluation_metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://securemailscope/schema/Report.json",
+  "$defs": {
+    "Capture": {
+      "type": "object",
+      "title": "Capture",
+      "description": "The source artifact. Stage S0.",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "packet_count": {
+          "type": "integer"
+        },
+        "first_packet_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_packet_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "link_type": {
+          "type": "string"
+        },
+        "analysed_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_version": {
+          "type": "string"
+        }
+      }
+    },
+    "MailSession": {
+      "type": "object",
+      "title": "MailSession",
+      "description": "A flow identified as email, with everything we learned about it.",
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Flow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protocol": {
+          "$ref": "#/$defs/MailProtocol"
+        },
+        "protocol_confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "port_role": {
+          "$ref": "#/$defs/PortRole"
+        },
+        "tls_mode": {
+          "$ref": "#/$defs/TlsMode"
+        },
+        "server_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "server_port": {
+          "type": "integer"
+        },
+        "client_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "banner": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Phase"
+          }
+        },
+        "starttls": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StarttlsValidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "handshake": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TlsHandshake"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "certificates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Certificate"
+          }
+        },
+        "chain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChainResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attack_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttackEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "features": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeatureVector"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "assessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionAssessment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "Flow": {
+      "type": "object",
+      "title": "Flow",
+      "description": "One reconstructed TCP conversation. Stage S1. Deliverable D03.",
+      "properties": {
+        "stream_id": {
+          "type": "integer"
+        },
+        "src_ip": {
+          "type": "string"
+        },
+        "src_port": {
+          "type": "integer"
+        },
+        "dst_ip": {
+          "type": "string"
+        },
+        "dst_port": {
+          "type": "integer"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packet_count": {
+          "type": "integer"
+        },
+        "c2s_bytes": {
+          "type": "integer"
+        },
+        "s2c_bytes": {
+          "type": "integer"
+        },
+        "byte_to_frame_c2s": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "byte_to_frame_s2c": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "has_gaps": {
+          "type": "boolean"
+        },
+        "retransmission_count": {
+          "type": "integer"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "Evidence": {
+      "type": "object",
+      "title": "Evidence",
+      "description": "Where in the capture this fact came from.",
+      "properties": {
+        "capture_sha256": {
+          "type": "string"
+        },
+        "stream_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "byte_range": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MailProtocol": {
+      "type": "string",
+      "enum": [
+        "smtp",
+        "imap",
+        "pop3",
+        "unknown"
+      ],
+      "description": "Application-layer protocol identified at stage S2. Deliverable D01."
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "confirmed"
+      ],
+      "description": "How sure we are. Forensic findings report confidence, not certainty."
+    },
+    "PortRole": {
+      "type": "string",
+      "enum": [
+        "mta_relay",
+        "submission",
+        "mail_access",
+        "unknown"
+      ],
+      "description": "What the port is *for*, which determines how harshly we judge it."
+    },
+    "TlsMode": {
+      "type": "string",
+      "enum": [
+        "implicit",
+        "starttls",
+        "cleartext",
+        "unknown"
+      ],
+      "description": "How (or whether) the session got to TLS."
+    },
+    "Phase": {
+      "type": "object",
+      "title": "Phase",
+      "description": "A segment of the session's lifetime. Stages S3/S4. Deliverable D02/D03.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/PhaseKind"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "byte_range_c2s": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "byte_range_s2c": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "PhaseKind": {
+      "type": "string",
+      "enum": [
+        "plaintext",
+        "starttls_negotiation",
+        "encrypted"
+      ],
+      "description": "A segment of a session's lifetime. Deliverable D02/D03."
+    },
+    "StarttlsValidation": {
+      "type": "object",
+      "title": "StarttlsValidation",
+      "description": "The ten checks behind deliverable D02.",
+      "properties": {
+        "v1_advertised": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v2_capability_mangled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v3_client_issued": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v4_server_accepted": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v5_clienthello_followed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v6_handshake_completed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v7_ehlo_reissued": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v8_auth_offered_before_tls": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v9_credentials_before_tls": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v10_command_injection": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observed_capability_line": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "TlsHandshake": {
+      "type": "object",
+      "title": "TlsHandshake",
+      "description": "Reconstructed handshake. Stage S4. Deliverables D04-D07.",
+      "properties": {
+        "client_hello": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClientHelloInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "server_hello": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServerHelloInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "negotiated_version": {
+          "$ref": "#/$defs/TlsVersion"
+        },
+        "cipher_suite_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key_exchange": {
+          "$ref": "#/$defs/KeyExchange"
+        },
+        "key_exchange_bits": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cipher_bits": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_aead": {
+          "type": "boolean"
+        },
+        "has_forward_secrecy": {
+          "type": "boolean"
+        },
+        "message_sequence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "pq_groups_offered": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pq_group_negotiated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "ClientHelloInfo": {
+      "type": "object",
+      "title": "ClientHelloInfo",
+      "description": "Parsed ClientHello. Feeds JA3, PQ readiness (USP-05) and the cipher",
+      "properties": {
+        "legacy_version": {
+          "$ref": "#/$defs/TlsVersion"
+        },
+        "supported_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TlsVersion"
+          }
+        },
+        "cipher_suites": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "cipher_suite_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "supported_groups": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "supported_group_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signature_algorithms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ec_point_formats": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "server_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alpn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "compression_methods": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "fallback_scsv": {
+          "type": "boolean"
+        },
+        "session_ticket_offered": {
+          "type": "boolean"
+        },
+        "ja3": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ja3_string": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "TlsVersion": {
+      "type": "string",
+      "enum": [
+        "ssl2",
+        "ssl3",
+        "tls1.0",
+        "tls1.1",
+        "tls1.2",
+        "tls1.3",
+        "unknown"
+      ],
+      "description": "Negotiated TLS version. Deliverable D05."
+    },
+    "ServerHelloInfo": {
+      "type": "object",
+      "title": "ServerHelloInfo",
+      "description": "Parsed ServerHello.",
+      "properties": {
+        "legacy_version": {
+          "$ref": "#/$defs/TlsVersion"
+        },
+        "negotiated_version": {
+          "$ref": "#/$defs/TlsVersion"
+        },
+        "cipher_suite": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cipher_suite_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "selected_group": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selected_group_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alpn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compression_method": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renegotiation_info": {
+          "type": "boolean"
+        },
+        "session_resumed": {
+          "type": "boolean"
+        },
+        "downgrade_sentinel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ja3s": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ja3s_string": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "KeyExchange": {
+      "type": "string",
+      "enum": [
+        "rsa",
+        "dh",
+        "dhe",
+        "ecdh",
+        "ecdhe",
+        "psk",
+        "dh_anon",
+        "ecdh_anon",
+        "tls13_ephemeral",
+        "unknown"
+      ],
+      "description": "Key exchange mechanism. Deliverable D07, feeds Forward Secrecy (D15)."
+    },
+    "Certificate": {
+      "type": "object",
+      "title": "Certificate",
+      "description": "One X.509 certificate. Stage S5. Deliverables D08, D10-D12.",
+      "properties": {
+        "chain_position": {
+          "type": "integer"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "subject_cn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "issuer_cn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "serial_number": {
+          "type": "string"
+        },
+        "not_before": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "not_after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sha256_fingerprint": {
+          "type": "string"
+        },
+        "public_key_algorithm": {
+          "$ref": "#/$defs/PubKeyAlgorithm"
+        },
+        "public_key_bits": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signature_algorithm": {
+          "$ref": "#/$defs/SignatureAlgorithm"
+        },
+        "subject_alt_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "is_ca": {
+          "type": "boolean"
+        },
+        "is_self_signed": {
+          "type": "boolean"
+        },
+        "key_usage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "PubKeyAlgorithm": {
+      "type": "string",
+      "enum": [
+        "rsa",
+        "ecdsa",
+        "ed25519",
+        "ed448",
+        "dsa",
+        "unknown"
+      ],
+      "description": "Certificate public key algorithm. Deliverable D11."
+    },
+    "SignatureAlgorithm": {
+      "type": "string",
+      "enum": [
+        "md5WithRSA",
+        "sha1WithRSA",
+        "sha256WithRSA",
+        "sha384WithRSA",
+        "sha512WithRSA",
+        "rsassaPss",
+        "ecdsa-with-SHA1",
+        "ecdsa-with-SHA256",
+        "ecdsa-with-SHA384",
+        "ecdsa-with-SHA512",
+        "ed25519",
+        "unknown"
+      ],
+      "description": "Certificate signature algorithm. Deliverable D12."
+    },
+    "ChainResult": {
+      "type": "object",
+      "title": "ChainResult",
+      "description": "Outcome of passive chain validation. Stage S5. Deliverable D09.",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/ChainStatus"
+        },
+        "chain_length": {
+          "type": "integer"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "hostname_matched": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "matched_against": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "root_in_trust_store": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "ChainStatus": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "self_signed",
+        "incomplete",
+        "unknown_issuer",
+        "expired",
+        "not_yet_valid",
+        "name_mismatch",
+        "wrong_order",
+        "opaque_tls13",
+        "absent"
+      ],
+      "description": "Outcome of passive chain validation. Deliverable D09."
+    },
+    "AttackEvidence": {
+      "type": "object",
+      "title": "AttackEvidence",
+      "description": "Signals that an attack has ALREADY happened, not merely that it could.",
+      "properties": {
+        "starttls_stripping_suspected": {
+          "type": "boolean"
+        },
+        "credential_exposure": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CredentialExposure"
+          }
+        },
+        "downgrade_sentinel_present": {
+          "type": "boolean"
+        },
+        "fallback_scsv_present": {
+          "type": "boolean"
+        },
+        "cipher_intersection_anomaly": {
+          "type": "boolean"
+        },
+        "weakest_selected_over_available": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "certificate_substitution": {
+          "type": "boolean"
+        },
+        "observed_fingerprints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "corroborating_signals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "CredentialExposure": {
+      "type": "object",
+      "title": "CredentialExposure",
+      "description": "Authentication material observed in a cleartext phase.",
+      "properties": {
+        "mechanism": {
+          "type": "string"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "password_redacted": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "password_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "raw_b64": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "FeatureVector": {
+      "type": "object",
+      "title": "FeatureVector",
+      "description": "Explicit, named, inspectable ML input. Objective O01.",
+      "properties": {
+        "tls_version_num": {
+          "type": "number"
+        },
+        "is_deprecated_version": {
+          "type": "boolean"
+        },
+        "version_downgrade_from_offered": {
+          "type": "number"
+        },
+        "cipher_strength_bits": {
+          "type": "integer"
+        },
+        "cipher_is_aead": {
+          "type": "boolean"
+        },
+        "cipher_is_cbc": {
+          "type": "boolean"
+        },
+        "cipher_is_rc4": {
+          "type": "boolean"
+        },
+        "cipher_is_3des": {
+          "type": "boolean"
+        },
+        "cipher_is_null_or_anon": {
+          "type": "boolean"
+        },
+        "cipher_is_export": {
+          "type": "boolean"
+        },
+        "kex_is_ephemeral": {
+          "type": "boolean"
+        },
+        "kex_is_anon": {
+          "type": "boolean"
+        },
+        "kex_group_bits": {
+          "type": "integer"
+        },
+        "has_forward_secrecy": {
+          "type": "boolean"
+        },
+        "pq_hybrid_offered": {
+          "type": "boolean"
+        },
+        "pq_hybrid_negotiated": {
+          "type": "boolean"
+        },
+        "cert_present": {
+          "type": "boolean"
+        },
+        "cert_opaque_tls13": {
+          "type": "boolean"
+        },
+        "cert_days_to_expiry": {
+          "type": "integer"
+        },
+        "cert_is_expired": {
+          "type": "boolean"
+        },
+        "cert_is_self_signed": {
+          "type": "boolean"
+        },
+        "cert_key_bits": {
+          "type": "integer"
+        },
+        "cert_key_is_rsa": {
+          "type": "boolean"
+        },
+        "cert_sig_is_weak": {
+          "type": "boolean"
+        },
+        "cert_chain_length": {
+          "type": "integer"
+        },
+        "cert_chain_complete": {
+          "type": "boolean"
+        },
+        "cert_hostname_match": {
+          "type": "boolean"
+        },
+        "port_role_is_relay": {
+          "type": "boolean"
+        },
+        "port_role_is_submission": {
+          "type": "boolean"
+        },
+        "port_role_is_access": {
+          "type": "boolean"
+        },
+        "tls_mode_is_implicit": {
+          "type": "boolean"
+        },
+        "tls_mode_is_starttls": {
+          "type": "boolean"
+        },
+        "tls_mode_is_cleartext": {
+          "type": "boolean"
+        },
+        "starttls_advertised": {
+          "type": "boolean"
+        },
+        "starttls_completed": {
+          "type": "boolean"
+        },
+        "starttls_ehlo_reissued": {
+          "type": "boolean"
+        },
+        "starttls_stripped_suspected": {
+          "type": "boolean"
+        },
+        "credentials_in_cleartext": {
+          "type": "boolean"
+        },
+        "auth_before_tls": {
+          "type": "boolean"
+        },
+        "downgrade_sentinel_present": {
+          "type": "boolean"
+        },
+        "fallback_scsv_present": {
+          "type": "boolean"
+        },
+        "cipher_intersection_anomaly": {
+          "type": "boolean"
+        },
+        "certificate_substitution": {
+          "type": "boolean"
+        },
+        "renegotiation_info_present": {
+          "type": "boolean"
+        },
+        "compression_enabled": {
+          "type": "boolean"
+        },
+        "sni_present": {
+          "type": "boolean"
+        },
+        "alpn_present": {
+          "type": "boolean"
+        },
+        "session_resumed": {
+          "type": "boolean"
+        },
+        "handshake_alert_count": {
+          "type": "integer"
+        },
+        "ja3_rarity": {
+          "type": "number"
+        },
+        "ja3s_rarity": {
+          "type": "number"
+        }
+      }
+    },
+    "SessionAssessment": {
+      "type": "object",
+      "title": "SessionAssessment",
+      "description": "AI output for one session. Deliverables D16, D17, D18.",
+      "properties": {
+        "risk_score": {
+          "type": "number"
+        },
+        "risk_label": {
+          "$ref": "#/$defs/Severity"
+        },
+        "shap_contributions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapContribution"
+          }
+        },
+        "anomaly_score": {
+          "type": "number"
+        },
+        "is_anomalous": {
+          "type": "boolean"
+        },
+        "anomaly_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "priority_rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exploitability": {
+          "type": "number"
+        },
+        "blast_radius": {
+          "type": "number"
+        },
+        "model_version": {
+          "type": "string"
+        }
+      }
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "Finding severity. Both the base and the role-adjusted value are kept."
+    },
+    "ShapContribution": {
+      "type": "object",
+      "title": "ShapContribution",
+      "description": "One bar of the explanation waterfall. USP-04.",
+      "properties": {
+        "feature": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "contribution": {
+          "type": "number"
+        },
+        "human_readable": {
+          "type": "string"
+        }
+      }
+    },
+    "Finding": {
+      "type": "object",
+      "title": "Finding",
+      "description": "One detected issue. Stage S6. Deliverables D13, D14, D15.",
+      "properties": {
+        "rule_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/FindingCategory"
+        },
+        "base_severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "severity_adjustment_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "affected_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "affected_port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "port_role": {
+          "$ref": "#/$defs/PortRole"
+        },
+        "session_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "standards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StandardRef"
+          }
+        },
+        "remediation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Remediation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "related_attacks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "FindingCategory": {
+      "type": "string",
+      "enum": [
+        "protocol",
+        "cipher",
+        "key_exchange",
+        "certificate",
+        "certificate_strength",
+        "configuration",
+        "starttls",
+        "attack_evidence",
+        "post_quantum",
+        "compliance"
+      ],
+      "description": "Top-level grouping, used for the dashboard's category subscores."
+    },
+    "StandardRef": {
+      "type": "object",
+      "title": "StandardRef",
+      "description": "A citation. Populate this when you WRITE the rule (USP-08).",
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "identifier": {
+          "type": "string"
+        },
+        "clause": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relation": {
+          "type": "string"
+        }
+      }
+    },
+    "Remediation": {
+      "type": "object",
+      "title": "Remediation",
+      "description": "What to actually do about it. Objective O02.",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "postfix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dovecot": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exchange": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effort": {
+          "type": "string"
+        },
+        "risk_of_change": {
+          "type": "string"
+        },
+        "llm_generated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "HostPosture": {
+      "type": "object",
+      "title": "HostPosture",
+      "description": "Per-server rollup. The PS says 'infrastructureS' -- fleet view is required.",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MailProtocol"
+          }
+        },
+        "session_count": {
+          "type": "integer"
+        },
+        "score": {
+          "type": "number"
+        },
+        "grade": {
+          "$ref": "#/$defs/Grade"
+        },
+        "category_scores": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CategoryScore"
+          }
+        },
+        "worst_tls_version": {
+          "$ref": "#/$defs/TlsVersion"
+        },
+        "forward_secrecy_ratio": {
+          "type": "number"
+        },
+        "pq_ready": {
+          "type": "boolean"
+        },
+        "finding_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "top_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        }
+      }
+    },
+    "Grade": {
+      "type": "string",
+      "enum": [
+        "A+",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "?"
+      ],
+      "description": "Posture grade, SSL-Labs style. Deliverable D19."
+    },
+    "CategoryScore": {
+      "type": "object",
+      "title": "CategoryScore",
+      "description": "Subscore for one finding category, so the dashboard can show a breakdown.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/FindingCategory"
+        },
+        "score": {
+          "type": "number"
+        },
+        "finding_count": {
+          "type": "integer"
+        },
+        "worst_severity": {
+          "$ref": "#/$defs/Severity"
+        }
+      }
+    },
+    "FleetPosture": {
+      "type": "object",
+      "title": "FleetPosture",
+      "description": "Capture-wide assessment. Deliverable D19.",
+      "properties": {
+        "score": {
+          "type": "number"
+        },
+        "grade": {
+          "$ref": "#/$defs/Grade"
+        },
+        "host_count": {
+          "type": "integer"
+        },
+        "session_count": {
+          "type": "integer"
+        },
+        "category_scores": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CategoryScore"
+          }
+        },
+        "forward_secrecy_ratio": {
+          "type": "number"
+        },
+        "pq_ready_hosts": {
+          "type": "integer"
+        },
+        "deprecated_version_sessions": {
+          "type": "integer"
+        },
+        "cleartext_credential_sessions": {
+          "type": "integer"
+        },
+        "compliance": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

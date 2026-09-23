@@ -1,0 +1,195 @@
+building report from the corpus...
+
+====================================================================================================
+  PROBLEM STATEMENT DELIVERABLES
+====================================================================================================
+
+[x] D01      SMTP / IMAP / POP3 identification
+        MET
+        identified ['imap', 'pop3', 'smtp'] across 13 sessions
+        -> proto/detect.py
+
+[x] D02      STARTTLS detection and validation
+        MET
+        7 sessions validated; nine checks passive, V7 conditional (not observable once the
+        upgrade succeeds)
+        -> proto/starttls.py
+
+[x] D03      Complete TCP stream reconstruction
+        MET
+        13 streams, 13,665 bytes reassembled, byte->frame map populated
+        -> capture/reassemble.py
+
+[x] D04      TLS handshake reconstruction
+        MET
+        9 handshakes with an ordered message sequence (rendered as a ladder diagram)
+        -> tls/handshake.py
+
+[x] D05      Negotiated TLS version
+        MET
+        observed ['tls1.0', 'tls1.2', 'tls1.3']; TLS 1.3 read from supported_versions
+        (verified)
+        -> tls/handshake.py
+
+[x] D06      Negotiated cipher suites
+        MET
+        7 distinct suites resolved to IANA names
+        -> tls/ciphers.py
+
+[x] D07      Key exchange mechanisms
+        MET
+        observed ['ecdhe', 'rsa', 'tls13_ephemeral']
+        -> tls/ciphers.py
+
+[x] D08      X.509 certificate extraction
+        MET
+        11 certificates parsed from Certificate messages (pure-Python DER)
+        -> certs/extract.py
+
+[x] D09      Certificate chain validation
+        MET
+        statuses ['expired', 'name_mismatch', 'opaque_tls13', 'valid']; 6 chains had their RSA
+        signature cryptographically verified
+        -> certs/chain.py
+
+[x] D10      Certificate expiration analysis
+        MET
+        days-to-expiry computed for 11 certificates (range -46 to 3651)
+        -> certs/extract.py
+
+[x] D11      Public key algorithm and length
+        MET
+        observed [('rsa', 1024), ('rsa', 2048)]
+        -> certs/extract.py
+
+[x] D12      Digital signature algorithm
+        MET
+        observed ['sha1WithRSA', 'sha256WithRSA']
+        -> certs/extract.py
+
+[x] D13      Weak algorithms and deprecated versions
+        MET
+        fired: ['CERT-WEAK-KEY', 'CERT-WEAK-SIGNATURE', 'TLS-DEPRECATED-VERSION',
+        'TLS-WEAK-CIPHER-RC4']
+        -> rules/pack.py
+
+[x] D14      Insecure protocol configuration
+        MET
+        fired: ['ANALYSIS-INCOMPLETE-HANDSHAKE', 'CONFIG-NO-RENEGOTIATION-INFO',
+        'SMTP-RELAY-NO-TLS']
+        -> rules/pack.py
+
+[x] D15      Forward secrecy assessment
+        MET
+        assessed on 9 handshakes; fleet ratio 0.7
+        -> tls/ciphers.py, rules/pack.py
+
+[~] D16      AI-based cryptographic risk scoring
+        PARTIAL
+        13 sessions scored with explanations; backend ['rule_baseline']. The trained
+        classifier needs scikit-learn, which is blocked on this machine (ADR-0012), so the
+        rule-derived baseline ran
+        -> ml/classifier.py
+
+[~] D17      AI-assisted anomaly detection
+        PARTIAL
+        1 flagged, 1 with stated reasons; JA3 rarity + peer deviation ran. Isolation Forest
+        needs scikit-learn
+        -> ml/anomaly.py
+
+[x] D18      Prioritised security findings
+        MET
+        32 findings ranked by severity, then exploitability, blast radius and breadth, each
+        with a written rationale
+        -> ml/priority.py
+
+[x] D19      Comprehensive posture assessment
+        MET
+        fleet grade D (54.7/100) across 11 hosts, with per-host rollups and capping rules
+        -> pipeline.py
+
+[~] D20      JSON / PDF / HTML export
+        PARTIAL
+        JSON yes, HTML yes, PDF no - needs Playwright; the HTML carries a print stylesheet so
+        any browser produces the same document
+        -> report/__init__.py
+
+[x] D21      Interactive visualization dashboard
+        MET
+        single self-contained HTML file: filterable triage queue, expandable findings,
+        per-session handshake ladder, STARTTLS panel, certificate inspector, risk waterfall,
+        compliance card
+        -> report/assets.py
+
+[x] O01      Cryptographic feature extraction
+        MET
+        51 named fields, extracted for 13 sessions and displayed in the report
+        -> features/__init__.py
+
+[~] O02      Mitigation recommendations
+        PARTIAL
+        32/32 findings carry remediation, 16 with config snippets. The LLM narrative layer
+        (USP-04 layer 3) is NOT built
+        -> rules/pack.py
+
+====================================================================================================
+  UNIQUE SELLING POINTS
+====================================================================================================
+
+[x] USP-01   Role-aware severity engine
+        MET
+        12 findings adjusted by port role, each with a written justification; 1 rule(s)
+        produced opposite verdicts on different roles: ['CERT-EXPIRED-SELF-SIGNED']
+
+[x] USP-02   Attack-evidence layer
+        MET
+        5/5 detectors implemented; 5/5 fired on this corpus: ['STARTTLS stripping',
+        'credential exposure', 'downgrade sentinel', 'cipher intersection', 'certificate
+        substitution']
+
+[x] USP-03   Evidence-linked findings
+        MET
+        32/32 findings carry capture hash, stream id, frame numbers and byte offsets
+
+[~] USP-04   Three-layer explainable AI
+        PARTIAL
+        layer 1 risk+explanation: yes (baseline backend; trained model blocked). layer 2
+        anomaly: yes (peer deviation + JA3 rarity; Isolation Forest blocked). layer 3 LLM
+        remediation: NOT BUILT
+
+[x] USP-05   Post-quantum readiness
+        MET
+        hybrid groups detected in supported_groups; 1 session(s) offered one, 1/11 hosts ready
+
+[x] USP-06   Four persona views
+        MET
+        4/4 rendered: ['soc', 'forensics', 'incident_response', 'administrator']; all share
+        one analysis
+
+[~] USP-07   Ground-truth testbed and measured accuracy
+        PARTIAL
+        manifest with 18 labelled captures exists; the synthetic corpus generates and the
+        pipeline runs over it. BUT scripts/evaluate.py still raises NotImplementedError, so
+        precision and recall are NOT measured. This is the weakest claim in the deck right now
+
+[x] USP-08   Compliance report card
+        MET
+        17 standards tracked, 10 failed; context-only citations correctly excluded
+
+[~] USP-09   Attack feasibility matrix
+        PARTIAL
+        14 named attacks attached to findings (['Account takeover', 'BEAST', 'Chosen-prefix
+        collision', 'Credential theft']...), but no feasibility verdict column and no
+        dedicated panel
+
+[ ] USP-10   Temporal posture drift
+        NOT MET
+        not built; needs two captures diffed
+
+[ ] USP-11   Passive DNS / DANE / MTA-STS correlation
+        NOT MET
+        not built; needs DNS extraction from the capture
+
+  met       25   D01, D02, D03, D04, D05, D06, D07, D08, D09, D10, D11, D12, D13, D14, D15, D18, D19, D21, O01, USP-01, USP-02, USP-03, USP-05, USP-06, USP-08
+  partial    7   D16, D17, D20, O02, USP-04, USP-07, USP-09
+  not met    2   USP-10, USP-11

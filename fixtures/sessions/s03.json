@@ -1,0 +1,481 @@
+{
+  "session_id": "s03",
+  "flow": {
+    "stream_id": 3,
+    "src_ip": "10.20.4.17",
+    "src_port": 49003,
+    "dst_ip": "10.20.1.13",
+    "dst_port": 587,
+    "started_at": "2026-09-23T10:00:00+00:00",
+    "ended_at": null,
+    "packet_count": 51,
+    "c2s_bytes": 2100,
+    "s2c_bytes": 8400,
+    "byte_to_frame_c2s": {},
+    "byte_to_frame_s2c": {},
+    "has_gaps": false,
+    "retransmission_count": 0,
+    "evidence": {
+      "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+      "stream_id": 3,
+      "frame_numbers": [
+        248,
+        249
+      ],
+      "byte_range": [
+        9920,
+        10152
+      ],
+      "direction": "s2c",
+      "timestamp": "2026-09-23T10:00:21+00:00",
+      "note": null
+    }
+  },
+  "protocol": "smtp",
+  "protocol_confidence": "confirmed",
+  "port_role": "submission",
+  "tls_mode": "starttls",
+  "server_host": "mail-02.dept.gov.in",
+  "server_port": 587,
+  "client_host": "10.20.4.17",
+  "banner": "220 mail-02.dept.gov.in ESMTP Postfix",
+  "phases": [
+    {
+      "kind": "plaintext",
+      "started_at": "2026-09-23T10:00:00+00:00",
+      "ended_at": null,
+      "byte_range_c2s": null,
+      "byte_range_s2c": null,
+      "commands": [
+        "EHLO client.example",
+        "250-STARTTLS"
+      ],
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 3,
+        "frame_numbers": [
+          233,
+          234
+        ],
+        "byte_range": [
+          9320,
+          9552
+        ],
+        "direction": "c2s",
+        "timestamp": "2026-09-23T10:00:21+00:00",
+        "note": null
+      }
+    },
+    {
+      "kind": "starttls_negotiation",
+      "started_at": "2026-09-23T10:00:00+00:00",
+      "ended_at": null,
+      "byte_range_c2s": null,
+      "byte_range_s2c": null,
+      "commands": [
+        "STARTTLS",
+        "220 2.0.0 Ready to start TLS"
+      ],
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 3,
+        "frame_numbers": [
+          238,
+          239
+        ],
+        "byte_range": [
+          9520,
+          9752
+        ],
+        "direction": "s2c",
+        "timestamp": "2026-09-23T10:00:21+00:00",
+        "note": null
+      }
+    },
+    {
+      "kind": "encrypted",
+      "started_at": "2026-09-23T10:00:00+00:00",
+      "ended_at": null,
+      "byte_range_c2s": null,
+      "byte_range_s2c": null,
+      "commands": [],
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 3,
+        "frame_numbers": [
+          243,
+          244
+        ],
+        "byte_range": [
+          9720,
+          9952
+        ],
+        "direction": "s2c",
+        "timestamp": "2026-09-23T10:00:21+00:00",
+        "note": null
+      }
+    }
+  ],
+  "starttls": {
+    "v1_advertised": true,
+    "v2_capability_mangled": false,
+    "v3_client_issued": true,
+    "v4_server_accepted": true,
+    "v5_clienthello_followed": true,
+    "v6_handshake_completed": true,
+    "v7_ehlo_reissued": true,
+    "v8_auth_offered_before_tls": false,
+    "v9_credentials_before_tls": false,
+    "v10_command_injection": false,
+    "observed_capability_line": "250-STARTTLS",
+    "evidence": {
+      "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+      "stream_id": 3,
+      "frame_numbers": [
+        207,
+        208
+      ],
+      "byte_range": [
+        8280,
+        8512
+      ],
+      "direction": "s2c",
+      "timestamp": "2026-09-23T10:00:21+00:00",
+      "note": null
+    }
+  },
+  "handshake": {
+    "client_hello": {
+      "legacy_version": "tls1.2",
+      "supported_versions": [
+        "tls1.3",
+        "tls1.2"
+      ],
+      "cipher_suites": [],
+      "cipher_suite_names": [
+        "ECDHE-RSA-AES256-GCM-SHA384",
+        "TLS_AES_128_GCM_SHA256"
+      ],
+      "extensions": [],
+      "supported_groups": [],
+      "supported_group_names": [
+        "x25519",
+        "secp256r1"
+      ],
+      "signature_algorithms": [],
+      "ec_point_formats": [],
+      "server_name": "mail-02.dept.gov.in",
+      "alpn": [],
+      "compression_methods": [],
+      "fallback_scsv": false,
+      "session_ticket_offered": false,
+      "ja3": "0000000000000000516115af1b5018d2",
+      "ja3_string": null,
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 3,
+        "frame_numbers": [
+          212,
+          213
+        ],
+        "byte_range": [
+          8480,
+          8712
+        ],
+        "direction": "c2s",
+        "timestamp": "2026-09-23T10:00:21+00:00",
+        "note": "ClientHello"
+      }
+    },
+    "server_hello": {
+      "legacy_version": "tls1.2",
+      "negotiated_version": "tls1.2",
+      "cipher_suite": null,
+      "cipher_suite_name": "ECDHE-RSA-AES256-GCM-SHA384",
+      "extensions": [],
+      "selected_group": null,
+      "selected_group_name": null,
+      "alpn": null,
+      "compression_method": null,
+      "renegotiation_info": true,
+      "session_resumed": false,
+      "downgrade_sentinel": null,
+      "ja3s": "00000000000000002cbdd3988d4c76d5",
+      "ja3s_string": null,
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 3,
+        "frame_numbers": [
+          217,
+          218
+        ],
+        "byte_range": [
+          8680,
+          8912
+        ],
+        "direction": "s2c",
+        "timestamp": "2026-09-23T10:00:21+00:00",
+        "note": "ServerHello"
+      }
+    },
+    "negotiated_version": "tls1.2",
+    "cipher_suite_name": "ECDHE-RSA-AES256-GCM-SHA384",
+    "key_exchange": "ecdhe",
+    "key_exchange_bits": 256,
+    "cipher_bits": 256,
+    "is_aead": true,
+    "has_forward_secrecy": true,
+    "message_sequence": [
+      "ClientHello",
+      "ServerHello",
+      "Certificate",
+      "ServerKeyExchange",
+      "ServerHelloDone",
+      "ClientKeyExchange",
+      "ChangeCipherSpec",
+      "Finished"
+    ],
+    "alerts": [],
+    "completed": true,
+    "pq_groups_offered": [],
+    "pq_group_negotiated": null,
+    "evidence": {
+      "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+      "stream_id": 3,
+      "frame_numbers": [
+        222,
+        223,
+        224,
+        225,
+        226,
+        227,
+        228,
+        229
+      ],
+      "byte_range": [
+        8880,
+        9112
+      ],
+      "direction": "s2c",
+      "timestamp": "2026-09-23T10:00:21+00:00",
+      "note": "full handshake"
+    }
+  },
+  "certificates": [
+    {
+      "chain_position": 0,
+      "subject": "CN=mail-02.dept.gov.in",
+      "subject_cn": "mail-02.dept.gov.in",
+      "issuer": "CN=Example Root CA, O=Example Trust Services",
+      "issuer_cn": "Example Root CA",
+      "serial_number": "0a:1b:2c:3d:4e:5f",
+      "not_before": "2026-08-24T10:00:00+00:00",
+      "not_after": "2026-11-22T10:00:00+00:00",
+      "sha256_fingerprint": "2c8d39ffbe243aa83d36c1cc75985434bc18aaf4eef3d423af677f89ea3ccbad",
+      "public_key_algorithm": "ecdsa",
+      "public_key_bits": 256,
+      "signature_algorithm": "ecdsa-with-SHA256",
+      "subject_alt_names": [
+        "mail-02.dept.gov.in"
+      ],
+      "is_ca": false,
+      "is_self_signed": false,
+      "key_usage": [],
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 1,
+        "frame_numbers": [
+          197,
+          198
+        ],
+        "byte_range": [
+          7880,
+          8112
+        ],
+        "direction": "s2c",
+        "timestamp": "2026-09-23T10:00:07+00:00",
+        "note": "Certificate message, leaf"
+      }
+    }
+  ],
+  "chain": {
+    "status": "valid",
+    "chain_length": 1,
+    "complete": true,
+    "hostname_matched": true,
+    "matched_against": "mail-02.dept.gov.in",
+    "root_in_trust_store": null,
+    "issues": [],
+    "evidence": {
+      "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+      "stream_id": 3,
+      "frame_numbers": [
+        253,
+        254
+      ],
+      "byte_range": [
+        10120,
+        10352
+      ],
+      "direction": "s2c",
+      "timestamp": "2026-09-23T10:00:21+00:00",
+      "note": null
+    }
+  },
+  "attack_evidence": null,
+  "features": {
+    "tls_version_num": 1.2,
+    "is_deprecated_version": false,
+    "version_downgrade_from_offered": 0.0,
+    "cipher_strength_bits": 256,
+    "cipher_is_aead": true,
+    "cipher_is_cbc": false,
+    "cipher_is_rc4": false,
+    "cipher_is_3des": false,
+    "cipher_is_null_or_anon": false,
+    "cipher_is_export": false,
+    "kex_is_ephemeral": true,
+    "kex_is_anon": false,
+    "kex_group_bits": 256,
+    "has_forward_secrecy": true,
+    "pq_hybrid_offered": false,
+    "pq_hybrid_negotiated": false,
+    "cert_present": true,
+    "cert_opaque_tls13": false,
+    "cert_days_to_expiry": 60,
+    "cert_is_expired": false,
+    "cert_is_self_signed": false,
+    "cert_key_bits": 256,
+    "cert_key_is_rsa": false,
+    "cert_sig_is_weak": false,
+    "cert_chain_length": 0,
+    "cert_chain_complete": true,
+    "cert_hostname_match": true,
+    "port_role_is_relay": false,
+    "port_role_is_submission": true,
+    "port_role_is_access": false,
+    "tls_mode_is_implicit": false,
+    "tls_mode_is_starttls": true,
+    "tls_mode_is_cleartext": false,
+    "starttls_advertised": true,
+    "starttls_completed": true,
+    "starttls_ehlo_reissued": false,
+    "starttls_stripped_suspected": false,
+    "credentials_in_cleartext": false,
+    "auth_before_tls": false,
+    "downgrade_sentinel_present": false,
+    "fallback_scsv_present": false,
+    "cipher_intersection_anomaly": false,
+    "certificate_substitution": false,
+    "renegotiation_info_present": true,
+    "compression_enabled": false,
+    "sni_present": true,
+    "alpn_present": false,
+    "session_resumed": false,
+    "handshake_alert_count": 0,
+    "ja3_rarity": 0.12,
+    "ja3s_rarity": 0.0
+  },
+  "assessment": {
+    "risk_score": 0.13,
+    "risk_label": "info",
+    "shap_contributions": [
+      {
+        "feature": "has_forward_secrecy",
+        "value": 1.0,
+        "contribution": -0.19,
+        "human_readable": "ECDHE forward secrecy"
+      },
+      {
+        "feature": "cipher_is_aead",
+        "value": 1.0,
+        "contribution": -0.14,
+        "human_readable": "AEAD cipher suite"
+      },
+      {
+        "feature": "tls_version_num",
+        "value": 1.0,
+        "contribution": 0.06,
+        "human_readable": "TLS 1.2 rather than 1.3"
+      }
+    ],
+    "anomaly_score": 0.12,
+    "is_anomalous": false,
+    "anomaly_reasons": [],
+    "priority_rank": null,
+    "exploitability": 0.14300000000000002,
+    "blast_radius": 0.9,
+    "model_version": "0.1.0"
+  },
+  "findings": [
+    {
+      "rule_id": "PQ-NOT-READY",
+      "title": "No post-quantum key exchange offered",
+      "description": "The ClientHello offered no hybrid post-quantum group. Traffic captured today can be stored and decrypted once a cryptographically relevant quantum computer exists — a live concern for mail, which organisations retain for years.",
+      "category": "post_quantum",
+      "base_severity": "low",
+      "severity": "low",
+      "severity_adjustment_reason": null,
+      "confidence": "confirmed",
+      "affected_host": "mail-02.dept.gov.in",
+      "affected_port": 587,
+      "port_role": "submission",
+      "session_ids": [
+        "s03"
+      ],
+      "standards": [
+        {
+          "body": "NIST",
+          "identifier": "FIPS 203",
+          "clause": null,
+          "requirement": "ML-KEM standardised for key encapsulation",
+          "url": null,
+          "relation": "violates"
+        }
+      ],
+      "remediation": {
+        "summary": "Plan migration to hybrid key exchange (X25519MLKEM768) as your TLS library adds support.",
+        "postfix": null,
+        "dovecot": null,
+        "exchange": null,
+        "generic": "Track OpenSSL 3.5+ / BoringSSL hybrid group support and enable it once available in your MTA build.",
+        "effort": "high",
+        "risk_of_change": "Requires a library upgrade.",
+        "llm_generated": false
+      },
+      "related_attacks": [
+        "Harvest now, decrypt later"
+      ],
+      "evidence": {
+        "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+        "stream_id": 3,
+        "frame_numbers": [
+          202,
+          203
+        ],
+        "byte_range": [
+          8080,
+          8312
+        ],
+        "direction": "s2c",
+        "timestamp": "2026-09-23T10:00:21+00:00",
+        "note": "ClientHello.supported_groups"
+      }
+    }
+  ],
+  "evidence": {
+    "capture_sha256": "35d6a741c50915018b553de0912f96e566ab5ac093af7205becdf226108718ff",
+    "stream_id": 3,
+    "frame_numbers": [
+      258,
+      259
+    ],
+    "byte_range": [
+      10320,
+      10552
+    ],
+    "direction": "s2c",
+    "timestamp": "2026-09-23T10:00:21+00:00",
+    "note": null
+  }
+}
