@@ -25,3 +25,5 @@ out/
 data/
 models/
 *.joblib
+
+pdf/
