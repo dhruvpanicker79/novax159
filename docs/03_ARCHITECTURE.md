@@ -107,11 +107,11 @@ securemailscope/
   llm/          S8       grounded remediation generation (+ template fallback)
   scoring/      S9       posture scoring, grading, prioritisation
   report/       S10      JSON / HTML / PDF, four persona templates
-  api/          S10      FastAPI service
+  api/          S10      Flask service + SOC console (auth, templates, static)
 schema/                  dataclass models + generated JSON Schema + TS types (the contract)
-testbed/                 docker-compose, manifests, capture generator
+testbed/                 manifests, capture generator, certificate generator
 fixtures/                generated sample report + per-session files for parallel development
-web/                     Next.js dashboard
+web/                     generated TypeScript types only - the console is server-rendered
 docs/                    this documentation
 ```
 

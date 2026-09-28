@@ -19,8 +19,8 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 
 | | |
 |---|---|
-| Python | ~15,500 lines |
-| Tests | **199, all passing** |
+| Python | ~15,800 lines, plus ~1,500 of console CSS/JS/HTML |
+| Tests | **201, all passing** |
 | Docs | ~48,000 words across 12 documents, **24 ADRs** |
 | Deliverables | **26 met, 6 partial, 2 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
@@ -85,7 +85,7 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 | `securemailscope/report/` | S10 | JSON + single self-contained HTML |
 | `securemailscope/store.py` | — | stdlib `sqlite3`, five tables, no ORM |
 | `securemailscope/siem.py` | — | CEF and ECS export |
-| `securemailscope/api/` | — | **Flask** service + `console.html`, the SOC UI |
+| `securemailscope/api/` | — | **Flask** service, stdlib auth, and the SOC console (`templates/`, `static/`) |
 | `testbed/` | — | `synth.py` writes PCAPs byte by byte; `certgen.py` makes signed certs |
 
 **Almost everything is written from scratch and stdlib-only.** That was forced (see §5), not stylistic.
@@ -155,7 +155,8 @@ example, so triage work becomes supervised signal rather than evaporating.
    cooked capture and we would report "no mail sessions". **Most likely cause of an on-stage failure.**
 7. **Real-world PCAPs.** Every capture measured so far is synthetic and self-authored.
 8. **PDF export** needs Playwright (blocked); browser print works and the print stylesheet is applied.
-9. **The dashboard's visual design** has had one human look at the console, none at the offline report.
+9. **The offline HTML report has never been looked at by a human.** The console has now been driven
+   end to end in a browser (ADR-0025); the report is a separate renderer and has not been.
 
 `securemailscope/scoring/` is an empty stub, but that is cosmetic: its logic lives in `pipeline.py` and works.
 

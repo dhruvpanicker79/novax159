@@ -62,8 +62,8 @@ Six people writing code in five days with AI assistance produces drift fast. The
 | S9 scoring and aggregation | **Done** — host and fleet rollups, capping rules |
 | S10 reports | **Done** — JSON + self-contained HTML; PDF needs Playwright |
 | S11 dashboard (D21) | **Done** — the same HTML file, interactive, zero build step |
-| FastAPI service | Not started |
+| HTTP service | **Done** — Flask, not FastAPI (ADR-0021); jobs, triage, audit, snapshots, SIEM |
 | **All 21 deliverables + O01, O02** | **Implemented and tested from PCAP bytes** |
 | Demo PCAP corpus | **Done (synthetic)** — `python testbed/synth.py`, 7 scenarios, no Docker needed |
-| Frontend | **Done as a single HTML file** (ADR-0018); Next.js optional if node appears |
+| Frontend | **Done** — offline report (ADR-0018) plus the nine-view SOC console (ADR-0025) |
 | PPT | Not started |

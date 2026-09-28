@@ -130,14 +130,16 @@ dependency blocks that shaped the build (ADR-0012, ADR-0017, ADR-0018).
 
 ## 4. Honest gaps, in priority order
 
-1. **`scripts/evaluate.py` is a stub.** USP-07's numbers do not exist. Highest priority — it is a claimed
-   differentiator.
-2. **`securemailscope/llm/` is a stub.** USP-04 layer 3; O02 is otherwise complete.
-3. **`securemailscope/api/` is a stub.** No FastAPI service; the CLI is the only entry point.
+1. ~~`scripts/evaluate.py` is a stub.~~ **Done** — precision 1.00, recall 1.00, severity accuracy 1.00; the
+   first run found two real false positives (ADR-0023), which is what makes the figure worth quoting.
+2. **`securemailscope/llm/` is a stub.** USP-04 layer 3; O02 is otherwise complete. Now the top gap.
+3. ~~`securemailscope/api/` is a stub.~~ **Done** — Flask service (ADR-0021/0022) and the SOC console with
+   stdlib authentication (ADR-0024/0025). The CLI is no longer the only entry point.
 4. **No trained model.** Needs WSL2. The baseline covers D16/D17 meanwhile.
 5. **No PDF export.** Needs Playwright. Browser print works.
-6. **The dashboard's visual design has never been looked at by a human.** Verified structurally only — the
-   preview pane renders local pages as static snapshots.
+6. **The offline HTML report's visual design has never been looked at by a human.** Verified structurally only.
+   The *console* has now been driven end to end in a browser (ADR-0025); the report is a separate renderer and
+   has not been.
 7. **No Docker testbed.** `testbed/README.md` describes a `docker-compose.yml` that was never written; the
    synthetic corpus (ADR-0013) covers the same ground without Docker, but real captures would catch things
    hand-written ones cannot.

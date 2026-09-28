@@ -559,3 +559,54 @@ configuration rather than from the output, and the first run found a real bug. A
 measurement — and this one did fail, which is what makes the figure worth quoting.
 
 **Next:** real-world PCAPs are now the highest-value corpus work — everything measured so far is self-authored.
+
+---
+
+## Session 6 — 2026-09-29 · the console and its front door
+
+**What shipped.** The SOC console: a login page, nine views, detail drawers, and real authentication. Two ADRs
+(0024, 0025). The test count went from 199 to 201 and all seven suites pass; `scripts/audit.py` is unchanged at
+**26 met / 6 partial / 2 not built**, which is the point of running it before and after.
+
+**Files.** `securemailscope/api/auth.py` (new), `static/app.css` (new, ~700 lines), `static/app.js` (new, ~800
+lines), `templates/login.html` and `templates/app.html` (new), `securemailscope/api/__init__.py` (auth wiring,
+`/login`, `/logout`, `/api/me`, role gate on finalisation), `schema/platform.py` (two audit actions),
+`tests/test_platform.py` (one test rewritten, two added). `securemailscope/api/console.html` deleted.
+
+**The reversal.** ADR-0022 argued against authentication and it was wrong — not about the value, about the
+price. An `X-Actor` header is a label the caller picks, so the audit trail recorded a claim rather than a fact,
+which is a bad thing to demonstrate for a tool that sells verifiable evidence. PBKDF2 out of `hashlib` cost
+~150 lines and no dependency. ADR-0024 says so explicitly rather than quietly changing it.
+
+### Bugs and near-misses this session
+
+**The old console test encoded the old console.** `test_console_is_served_and_self_contained` asserted on
+`id="jobs"`, `id="queue"` and the absence of `src=` — all true of a single-file page and all false of a shell
+plus two static files. The tempting fix was to loosen it until it passed. It was rewritten instead to test the
+*intent*: every `href`/`src` in the shell must resolve to this service, and the served CSS and JS must contain
+no `http://`, `https://`, `//cdn` or `@import url(`. That is a stronger test than the one it replaced.
+
+**A role check that lived only in the UI would not have been a role check.** The first pass hid the Finalise
+button from analysts. The API still accepted the call. Moved server-side, with a test for both sides.
+
+**Template caching, mistaken for a CSS bug.** An edit to `app.html` did not appear after a hard reload. Jinja's
+`auto_reload` is off when `debug=False`, so the template was cached for the process lifetime. Six people
+iterating on this UI would each lose time to it once, so `TEMPLATES_AUTO_RELOAD=True` is now set explicitly.
+
+**A layout bug that was not one.** The mobile rail refused to slide in: `.rail.open { transform: none }` matched,
+had higher specificity, came later, and the computed transform stayed at `-232px`. The cause was the browser pane
+being hidden — `requestAnimationFrame` never fires, so the transition started and never advanced, and
+`playState` reported `running` forever. The same thing produced screenshots with a black band and the app
+squeezed to the bottom. **Worth remembering: a hidden or minimised preview pane pauses compositing, so animated
+CSS and screenshots both lie.** Check `getBoundingClientRect()` and `offsetLeft` before believing either.
+
+**Still sloppy, now fixed:** `transition: .2s` is `transition: all .2s`, which animated the rail's border and
+background along with its position.
+
+**What the console is for.** Three panels exist to make the reasoning visible rather than to decorate it: the
+STARTTLS grid renders V7 as *not observable*; the certificate view prints TLS 1.3's encrypted Certificate
+message as expected behaviour rather than a missing certificate; every role-adjusted finding carries its own
+justification. USP-01, USP-04 and ADR-0014, on screen.
+
+**Next:** unchanged — real-world PCAPs, link-layer coverage (IPv6/VLAN/SLL), and the Colab training run. None of
+them are UI work, which is the right place to be.

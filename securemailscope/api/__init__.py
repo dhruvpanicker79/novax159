@@ -18,6 +18,7 @@ Implements the stateful half of the user workflow:
     GET  /api/audit                     append-only log        -> LOG AUDIT DATA
     POST /api/snapshots/<id>/finalise                          -> POSTURE FINALIZED
     GET  /api/samples                   bundled captures
+    GET  /  /login  /logout             the console and its session
 
 The samples endpoint matters for the demo: a live upload that fails in front of
 judges is recoverable only if there is a pre-loaded capture one click away.
@@ -25,6 +26,8 @@ judges is recoverable only if there is a pre-loaded capture one click away.
 
 from __future__ import annotations
 
+import os
+import secrets
 import threading
 import traceback
 from datetime import datetime, timezone
@@ -54,19 +57,43 @@ STAGES = [
 def create_app(db_path: str | Path | None = None):
     """Build the Flask app. Importing Flask lazily keeps `python -c 'import
     securemailscope'` working on a machine without it."""
-    from flask import Flask, jsonify, request, send_file
+    from flask import (Flask, jsonify, redirect, render_template, request,
+                       session, url_for)
 
     from ..report import build_html
     from ..siem import export as siem_export
-    from ..store import Store, finding_key
+    from ..store import Store
+    from .auth import UserStore, current_user, login_required
 
-    app = Flask(__name__)
+    app = Flask(__name__)                    # templates/ and static/ are alongside
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD
-    store = Store(db_path or ROOT / "data" / "securemailscope.db")
+    database = Path(db_path or ROOT / "data" / "securemailscope.db")
+    store = Store(database)
+    users = UserStore(database)              # one file, two tables
     UPLOADS.mkdir(parents=True, exist_ok=True)
 
+    # A signed session cookie needs a stable key, or every restart logs everyone
+    # out. Generated once and kept beside the database; overridable for a real
+    # deployment, where it should not live on disk next to the data.
+    secret_file = database.parent / "session.key"
+    if os.environ.get("SMS_SECRET"):
+        app.secret_key = os.environ["SMS_SECRET"]
+    else:
+        if not secret_file.exists():
+            secret_file.write_text(secrets.token_hex(32))
+        app.secret_key = secret_file.read_text().strip()
+    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                      # Off by default outside debug, which means an edit to a
+                      # template is invisible until the process restarts. Six
+                      # people iterating on the UI will hit that every time.
+                      TEMPLATES_AUTO_RELOAD=True)
+
     def actor() -> str:
-        """Who is acting. A name, not an identity system - see ADR-0022."""
+        """Who is acting. Signed-in username, falling back to the header used by
+        scripted callers and tests - see ADR-0022."""
+        user = current_user(users)
+        if user is not None:
+            return user.username
         return request.headers.get("X-Actor") or request.args.get("actor") or "analyst"
 
     # -- the runner ------------------------------------------------------- #
@@ -146,6 +173,7 @@ def create_app(db_path: str | Path | None = None):
     # -- jobs -------------------------------------------------------------- #
 
     @app.post("/api/jobs")
+    @login_required
     def submit():
         upload = request.files.get("file")
         if upload is None or not upload.filename:
@@ -161,10 +189,12 @@ def create_app(db_path: str | Path | None = None):
         return jsonify(job.to_dict()), 202
 
     @app.get("/api/jobs")
+    @login_required
     def jobs():
         return jsonify([j.to_dict() for j in store.list_jobs()])
 
     @app.get("/api/jobs/<job_id>")
+    @login_required
     def job_state(job_id: str):
         job = store.get_job(job_id)
         return (jsonify(job.to_dict()) if job else (jsonify(error="unknown job"), 404))
@@ -172,6 +202,7 @@ def create_app(db_path: str | Path | None = None):
     # -- reports ----------------------------------------------------------- #
 
     @app.get("/api/reports/<job_id>")
+    @login_required
     def report_json(job_id: str):
         payload = store.get_report(job_id)
         if payload is None:
@@ -179,6 +210,7 @@ def create_app(db_path: str | Path | None = None):
         return app.response_class(payload, mimetype="application/json")
 
     @app.get("/api/reports/<job_id>/html")
+    @login_required
     def report_html(job_id: str):
         payload = store.get_report(job_id)
         if payload is None:
@@ -188,6 +220,7 @@ def create_app(db_path: str | Path | None = None):
                                   mimetype="text/html")
 
     @app.get("/api/reports/<job_id>/siem")
+    @login_required
     def report_siem(job_id: str):
         payload = store.get_report(job_id)
         if payload is None:
@@ -204,10 +237,12 @@ def create_app(db_path: str | Path | None = None):
     # -- dispositions ------------------------------------------------------ #
 
     @app.get("/api/findings/<path:key>/disposition")
+    @login_required
     def get_disposition(key: str):
         return jsonify(store.get_disposition(key).to_dict())
 
     @app.post("/api/findings/<path:key>/disposition")
+    @login_required
     def set_disposition(key: str):
         body = request.get_json(silent=True) or {}
         try:
@@ -226,10 +261,12 @@ def create_app(db_path: str | Path | None = None):
         return jsonify(updated.to_dict())
 
     @app.get("/api/dispositions")
+    @login_required
     def dispositions():
         return jsonify({k: d.to_dict() for k, d in store.all_dispositions().items()})
 
     @app.get("/api/training-signal")
+    @login_required
     def training_signal():
         """Analyst decisions as labels. The feedback loop, made visible."""
         return jsonify(store.training_signal())
@@ -237,27 +274,37 @@ def create_app(db_path: str | Path | None = None):
     # -- audit, snapshots, samples ----------------------------------------- #
 
     @app.get("/api/audit")
+    @login_required
     def audit():
         limit = min(int(request.args.get("limit", 200)), 1000)
         return jsonify([e.to_dict() for e in store.audit_events(limit)])
 
     @app.get("/api/snapshots")
+    @login_required
     def snapshots():
         return jsonify([s.to_dict() for s in store.list_snapshots()])
 
     @app.post("/api/snapshots/<snapshot_id>/finalise")
+    @login_required
     def finalise(snapshot_id: str):
+        # Finalising is a sign-off, so it is the SOC manager's call, not an
+        # analyst's. 403 rather than a hidden button: the API is the boundary.
+        user = current_user(users)
+        if user is not None and not user.can_finalise:
+            return jsonify(error="finalising a posture requires the admin role"), 403
         snapshot = store.finalise_snapshot(snapshot_id, actor())
         return (jsonify(snapshot.to_dict()) if snapshot
                 else (jsonify(error="unknown snapshot"), 404))
 
     @app.get("/api/samples")
+    @login_required
     def samples():
         out = ROOT / "testbed" / "out"
         return jsonify(sorted(p.name for p in out.glob("*.pcap"))) if out.exists() \
             else jsonify([])
 
     @app.post("/api/samples/<name>/analyse")
+    @login_required
     def analyse_sample(name: str):
         """Run a bundled capture. The demo's safety net."""
         path = ROOT / "testbed" / "out" / Path(name).name
@@ -268,15 +315,48 @@ def create_app(db_path: str | Path | None = None):
         return jsonify(job.to_dict()), 202
 
     @app.get("/api/health")
+    @login_required
     def health():
         return jsonify(status="ok", jobs=len(store.list_jobs()))
 
+    @app.get("/api/me")
+    @login_required
+    def me():
+        user = current_user(users)
+        return jsonify(username=user.username, display_name=user.display_name,
+                       role=user.role, initials=user.initials,
+                       can_finalise=user.can_finalise)
+
+    # -- the console and its session --------------------------------------- #
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if request.method == "GET":
+            return render_template("login.html")
+        user = users.verify(request.form.get("username", ""),
+                            request.form.get("password", ""))
+        if user is None:
+            # One message for both failures: distinguishing them tells an
+            # attacker which usernames exist.
+            return render_template("login.html",
+                                   error="Incorrect username or password."), 401
+        session["user"] = user.username
+        session.permanent = False
+        store.record(user.username, AuditAction.SESSION_STARTED, "session",
+                     user.username, f"role {user.role}")
+        return redirect(url_for("console"))
+
+    @app.get("/logout")
+    def logout():
+        who = session.pop("user", None)
+        if who:
+            store.record(who, AuditAction.SESSION_ENDED, "session", who, "")
+        return redirect(url_for("login"))
+
     @app.get("/")
-    def index():
-        page = ROOT / "securemailscope" / "api" / "console.html"
-        return send_file(page) if page.exists() else jsonify(
-            service="SecureMailScope", endpoints=sorted(
-                str(r) for r in app.url_map.iter_rules() if str(r).startswith("/api")))
+    @login_required
+    def console():
+        return render_template("app.html")
 
     return app
 

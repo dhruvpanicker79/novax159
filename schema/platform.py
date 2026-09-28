@@ -103,6 +103,8 @@ class AuditAction(str, Enum):
     REPORT_EXPORTED = "report.exported"
     SIEM_EXPORTED = "finding.siem_exported"
     POSTURE_FINALISED = "posture.finalised"
+    SESSION_STARTED = "session.signed_in"
+    SESSION_ENDED = "session.signed_out"
 
 
 @dataclass

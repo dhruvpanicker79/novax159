@@ -992,8 +992,7 @@ manifest; 168 tests; `scripts/audit.py`.
 ## 14.3 Phase 1 (Months 1–3): completeness against the problem statement
 
 Domain-mode assessment — MTA-STS, DANE and TLSRPT lookups for a supplied domain, which the problem statement
-accepts alongside a capture; the FastAPI service so a capture can be uploaded rather than passed on a command
-line; the trained classifier; the evidence certificate annexe in the form section 63 expects.
+accepts alongside a capture; the trained classifier; the evidence certificate annexe in the form section 63 expects.
 
 ## 14.4 Phase 2 (Months 4–9): operational deployment
 

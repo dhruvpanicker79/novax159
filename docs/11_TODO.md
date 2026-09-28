@@ -64,7 +64,8 @@ The last partial is D20's PDF, which needs Playwright and is already covered by 
 ## C. The platform layer  —  **built** (ADR-0022)
 
 Everything below shipped. `python -m securemailscope.api` serves it on port 8000; the whole
-workflow was exercised over HTTP end to end. The browser console is built too: securemailscope/api/console.html, served at /.
+workflow was exercised over HTTP end to end. The console is built too - a login page and nine
+views at `/`, driven end to end in a browser (ADR-0024, ADR-0025).
 
 This is what makes the demo match the user-flow slide. It closes no deliverables but it is what judges *see*.
 Build order matters — each item depends on the one above.
@@ -87,8 +88,9 @@ Build order matters — each item depends on the one above.
       between "a tool" and "a tool that fits an existing SOC".
 - [x] **`PostureSnapshot`** — immutable finalised snapshot. Covers REPORT ARCHIVED and AUDIT POSTURE FINALIZATION,
       **and gives USP-10 temporal drift for free**, because two snapshots are a diff.
-- [x] **`Actor`** — a name and role on jobs and audit events. **Do not build real auth.** A name field satisfies
-      the SECURITY ADMIN lane; OAuth eats a day and impresses nobody.
+- [x] **`Actor`** — ~~a name and role on jobs and audit events. **Do not build real auth.**~~ **Reversed.**
+      A header is a label the caller picks, so the audit trail recorded a claim, not a fact. Stdlib PBKDF2
+      cost ~150 lines and no dependency (ADR-0024). Roles are enforced server-side, not by hiding buttons.
 
 ---
 
@@ -102,7 +104,11 @@ Build order matters — each item depends on the one above.
 - [ ] **Real-world PCAPs.** Everything in the corpus is synthetic *and* self-authored. Even five public captures
       (Wireshark sample wiki, malware-traffic-analysis.net) parsing correctly kills the "you only test your own
       output" objection. It will also find bugs.
-- [ ] **Look at the dashboard in a real browser.** Verified structurally only — nobody has actually seen it.
+- [x] **Look at the console in a real browser.** Driven end to end: sign in, run a bundled capture, open a
+      session and a finding drawer, acknowledge, finalise, export CEF/ECS, restart and confirm both the
+      session and the disposition survived.
+- [ ] **Look at the *offline HTML report* in a real browser.** Still verified structurally only. It is a
+      separate renderer from the console and nobody has seen it.
 
 ---
 

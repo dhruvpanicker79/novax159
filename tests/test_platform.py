@@ -348,13 +348,71 @@ def test_api_disposition_refuses_an_illegal_transition():
 
 def test_console_is_served_and_self_contained():
     """The console must work offline from the service itself - no CDN, no build
-    step, same reasoning as the offline report (ADR-0018)."""
-    body = _client().get("/").get_data(as_text=True)
+    step, same reasoning as the offline report (ADR-0018). It is now a shell
+    plus two static files rather than one document, so check every asset it
+    pulls comes from this service."""
+    import re
+    client = _client()
+    body = client.get("/").get_data(as_text=True)
     assert body.lstrip().lower().startswith("<!doctype html>")
-    for panel in ('id="drop"', 'id="jobs"', 'id="queue"', 'id="audit"', 'id="snaps"'):
-        assert panel in body, panel
-    for external in ("http://", "https://", "<link ", "src="):
-        assert external not in body, f"external reference in console: {external}"
+
+    for view in ("#overview", "#captures", "#sessions", "#findings",
+                 "#certificates", "#compliance", "#audit", "#snapshots",
+                 "#settings"):
+        assert view in body, view
+
+    assets = re.findall(r'(?:href|src)="([^"]+)"', body)
+    for url in assets:
+        if url.startswith(("data:", "#")):   # the inline favicon, hash routes
+            continue
+        assert url.startswith("/"), f"external reference in console: {url}"
+        # 302 is fine - /logout redirects, but this service serves it.
+        assert client.get(url).status_code in (200, 302), url
+
+    for name in ("app.css", "app.js"):
+        served = client.get(f"/static/{name}").get_data(as_text=True)
+        for external in ("http://", "https://", "//cdn", "@import url("):
+            assert external not in served, f"{name} reaches outside: {external}"
+
+
+def test_login_page_renders_and_rejects_a_bad_credential():
+    """Auth is real - a wrong password must not authenticate, and the failure
+    must not say which half was wrong."""
+    from securemailscope.api import create_app
+    app = create_app(_TMP / "auth.db")
+    app.config["AUTH_DISABLED"] = False      # deliberately not TESTING
+    client = app.test_client()
+
+    assert "Sign in" in client.get("/login").get_data(as_text=True)
+
+    bad = client.post("/login", data={"username": "analyst", "password": "wrong"})
+    assert bad.status_code == 401
+    assert b"Incorrect username or password" in bad.data
+    nosuch = client.post("/login", data={"username": "nobody", "password": "wrong"})
+    assert b"Incorrect username or password" in nosuch.data, "leaks which users exist"
+
+    assert client.get("/api/jobs").status_code == 401, "API is not guarded"
+    assert client.get("/", follow_redirects=False).status_code == 302
+
+    good = client.post("/login", data={"username": "analyst", "password": "analyst123"})
+    assert good.status_code == 302
+    assert client.get("/api/me").get_json()["username"] == "analyst"
+
+
+def test_only_an_admin_can_finalise_a_posture():
+    """Finalising is a sign-off. An analyst must be refused by the API, not
+    merely by a hidden button."""
+    from securemailscope.api import create_app
+    app = create_app(_TMP / "role.db")
+    app.config["AUTH_DISABLED"] = False
+    client = app.test_client()
+    client.post("/login", data={"username": "analyst", "password": "analyst123"})
+    assert client.post("/api/snapshots/whatever/finalise").status_code == 403
+
+    client.get("/logout")
+    client.post("/login", data={"username": "admin", "password": "admin123"})
+    # 404 for the unknown id, which means the role check let it through.
+    assert client.post("/api/snapshots/whatever/finalise").status_code == 404
 
 
 def test_api_samples_endpoint_backs_the_demo():
