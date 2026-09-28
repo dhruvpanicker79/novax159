@@ -59,29 +59,33 @@ The last partial is D20's PDF, which needs Playwright and is already covered by 
 
 ---
 
-## C. The platform layer
+## C. The platform layer  —  **built** (ADR-0022)
+
+Everything below shipped. `python -m securemailscope.api` serves it on port 8000; the whole
+workflow was exercised over HTTP end to end. What remains here is the browser UI on top.
 
 This is what makes the demo match the user-flow slide. It closes no deliverables but it is what judges *see*.
 Build order matters — each item depends on the one above.
 
 **Stack is settled: Flask + stdlib `sqlite3` + Jinja2.** FastAPI is unusable here (ADR-0021).
 
-- [ ] **`AnalysisJob` + SQLite + Flask upload/progress/result.**
+- [x] **`AnalysisJob` + SQLite + Flask upload/progress/result.**
       States: `queued → validating → running(stage) → completed | failed | rejected(reason)`.
       Unlocks every other box in the workflow; `rejected` *is* the ABORT/ERROR LOG box.
-- [ ] **Serve the existing HTML dashboard from Flask**, plus a sample-capture dropdown so the demo never depends
+- [x] **Serve the existing HTML dashboard from Flask** — `GET /api/reports/<id>/html`, plus
+      `GET /api/samples` and `POST /api/samples/<name>/analyse` for the demo safety net., plus a sample-capture dropdown so the demo never depends
       on upload working.
-- [ ] **`FindingDisposition`** — `new → acknowledged → in_progress → resolved | false_positive | accepted_risk`.
+- [x] **`FindingDisposition`** — `new → acknowledged → in_progress → resolved | false_positive | accepted_risk`.
       The single item that turns a report generator into a platform. **And it closes a loop:** every
       `false_positive` is a labelled training example, which makes the AI story a system rather than a one-shot
       score.
-- [ ] **`AuditEvent`** — append-only `(timestamp, actor, action, object, before, after)`. Serves the LOG AUDIT
+- [x] **`AuditEvent`** — append-only `(timestamp, actor, action, object, before, after)`. Serves the LOG AUDIT
       DATA box, the forensics persona, and the CERT-In six-hour reporting hook.
-- [ ] **SIEM export** — findings as CEF or ECS over syslog/webhook. Roughly 80 lines, and it is the difference
+- [x] **SIEM export** — findings as CEF or ECS over syslog/webhook. Roughly 80 lines, and it is the difference
       between "a tool" and "a tool that fits an existing SOC".
-- [ ] **`PostureSnapshot`** — immutable finalised snapshot. Covers REPORT ARCHIVED and AUDIT POSTURE FINALIZATION,
+- [x] **`PostureSnapshot`** — immutable finalised snapshot. Covers REPORT ARCHIVED and AUDIT POSTURE FINALIZATION,
       **and gives USP-10 temporal drift for free**, because two snapshots are a diff.
-- [ ] **`Actor`** — a name and role on jobs and audit events. **Do not build real auth.** A name field satisfies
+- [x] **`Actor`** — a name and role on jobs and audit events. **Do not build real auth.** A name field satisfies
       the SECURITY ADMIN lane; OAuth eats a day and impresses nobody.
 
 ---

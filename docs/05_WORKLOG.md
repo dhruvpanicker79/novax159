@@ -479,3 +479,33 @@ that, the baseline is what ships and the slide says so.
 1. Run `notebooks/train_models.ipynb` in Colab (~15 min) → D16/D17 move from PARTIAL to MET.
 2. `scripts/evaluate.py` — still a stub; USP-07 still claims precision and recall we do not have.
 3. The platform layer: Flask + sqlite3 job model, then finding dispositions.
+
+---
+
+## 2026-09-28 (later) — the platform layer
+
+**Done:** every remaining ❌ box in the user-flow diagram, plus the ⚠️ on ingestion validation (ADR-0022).
+
+- `schema/platform.py` — `AnalysisJob`, `FindingDisposition`, `AuditEvent`, `PostureSnapshot`, with a disposition
+  state machine and legal-transition table.
+- `securemailscope/store.py` — stdlib `sqlite3`, five tables, no ORM. Every human-caused write also writes an
+  audit event, because a log that depends on callers remembering to append to it is not an audit log.
+- `securemailscope/siem.py` — CEF and ECS export. Carries frame numbers and stream id, because a SIEM alert
+  nobody can verify against the capture is noise. Defaults to MEDIUM and above: forwarding everything is how a
+  feed gets muted.
+- `securemailscope/api/` — Flask, 16 endpoints. Upload, progress, report JSON/HTML, SIEM, dispositions, audit,
+  snapshots, and bundled samples so a demo never depends on a live upload working.
+- 25 new tests. **196 passing.**
+
+**Verified over HTTP, not just in tests:** `POST /api/samples/fleet.pcap/analyse` → completed, 13 sessions,
+32 findings, grade D → `CEF:0|SecureMailScope|...|ATTACK-CLEARTEXT-CREDENTIALS|...|9` → snapshot archived and
+finalised → disposition acknowledged → audit trail showing all six actions.
+
+**Note on the workflow diagram:** the `MITM ATTACK / FORCE PLAINTEXT DOWNGRADE` boxes are still on the slide and
+still show *our tool* performing an active attack. Nothing in the code does that and nothing should. That remains
+the highest-priority slide fix.
+
+**Next:**
+1. The browser UI on top of these endpoints — the one piece of the platform still missing.
+2. `scripts/evaluate.py` (USP-07 still claims numbers we do not have), after rewriting the stale manifest.
+3. Colab training run → D16/D17 to MET.

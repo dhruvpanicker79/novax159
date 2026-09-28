@@ -491,3 +491,49 @@ WSL2 — it has slipped for five days. Pydantic v1 — unmaintained, and FastAPI
 already in CLAUDE.md and is now proven a second time: **on these machines, test the call path, not the import.**
 `import cryptography` succeeds while `cryptography.x509` fails; `import pydantic` fails outright but only when the
 model class is touched.
+
+---
+
+## ADR-0022 — The platform layer: Flask, sqlite3, and a name instead of an identity system
+
+**Date:** 2026-09-28 · **Status:** Accepted
+
+**Context.** Every box in the user-flow diagram that carries *state* rather than facts was unbuilt: no job model,
+no persistence, no triage decision, no audit trail, no archive. The analysis engine was complete and the
+application around it did not exist.
+
+**Decision.** Four new contract objects in `schema/platform.py`, persisted by `securemailscope/store.py` in one
+SQLite file, exposed by a Flask app in `securemailscope/api/`:
+
+| Object | Workflow box |
+|---|---|
+| `AnalysisJob` | QUEUE FOR INGESTION, and `REJECTED` *is* the ABORT/ERROR LOG outcome |
+| `FindingDisposition` | TRIAGE ALERT / INCIDENT CLOSED (false positive) |
+| `AuditEvent` | LOG AUDIT DATA |
+| `PostureSnapshot` | REPORT ARCHIVED / AUDIT POSTURE FINALIZATION |
+
+Three decisions inside that are worth stating, because each had a tempting wrong answer:
+
+**`REJECTED` is not `FAILED`.** Rejected means we refused the input; failed means we accepted it and broke.
+Collapsing them hides our own bugs behind "bad file".
+
+**Dispositions are keyed on `rule@host:port`, not on a per-run finding id.** An analyst's decision has to survive
+re-analysing the same infrastructure. Keyed on a run id, every run resets the queue and the decisions are
+worthless. The transitions are a state machine, and an illegal one raises rather than being silently accepted —
+an audit trail is only worth something if the transitions in it were legal. Accepting risk requires a written
+justification, because an unexplained acceptance is indistinguishable from an unread alert.
+
+**`Actor` is a name on a request header, not an identity system.** The SECURITY ADMIN lane needs attribution, not
+authentication. OAuth would cost a day and impress nobody.
+
+**Rejected.** FastAPI (blocked — ADR-0021). An ORM or migration framework: five tables do not need one, and after
+seven dependency blocks the thing that persists state must not add a dependency. Celery or Redis for the job
+queue: a daemon thread is sufficient for single-file analysis and adds no infrastructure.
+
+**Consequence.** `python -m securemailscope.api` serves the whole workflow. Verified over HTTP end to end: sample
+capture → queued → 13 sessions, 32 findings, grade D → CEF export → snapshot archived and finalised → disposition
+recorded → six audit events. 25 new tests.
+
+**The loop this closes:** `DispositionState.FALSE_POSITIVE` is exposed at `GET /api/training-signal` as a labelled
+example. Analyst work becomes supervised signal instead of evaporating, which turns the AI story from a one-shot
+score into a system that improves with use.

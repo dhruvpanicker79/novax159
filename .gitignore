@@ -27,3 +27,5 @@ models/
 *.joblib
 
 pdf/
+data/uploads/
+*.db
