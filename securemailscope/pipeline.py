@@ -79,14 +79,12 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
     for session in sessions:
         session.features = features_stage.extract(session)
 
-    baseline = anomaly_stage.FleetBaseline.build([
-        (s.features,
-         s.handshake.client_hello.ja3 if s.handshake and s.handshake.client_hello else None,
-         s.handshake.server_hello.ja3s if s.handshake and s.handshake.server_hello else None)
-        for s in sessions if s.features
-    ])
-
-    # -- S6 and S8 ----------------------------------------------------------
+    # -- S6 must run BEFORE the baseline -----------------------------------
+    # The anomaly layer learns "normal" from this capture, so it has to know
+    # which sessions are compromised first. Building the baseline over every
+    # session lets the attacks define normal, and the more hosts are
+    # compromised the less anomalous compromise looks. See ADR-0019.
+    contexts: dict[str, pack.RuleContext] = {}
     all_findings = []
     for session in sessions:
         ctx = pack.RuleContext(
@@ -94,9 +92,28 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
             port=session.server_port, port_role=session.port_role,
             evidence=session.evidence,
         )
+        contexts[session.session_id] = ctx
         session.findings = pack.evaluate(ctx)
         for finding in session.findings:
             finding.session_ids = [session.session_id]
+        all_findings.extend(session.findings)
+
+    scored = [s for s in sessions if s.features]
+    contaminated = [
+        any(f.severity.rank >= Severity.HIGH.rank for f in s.findings)
+        for s in scored
+    ]
+    baseline = anomaly_stage.FleetBaseline.build(
+        [(s.features,
+          s.handshake.client_hello.ja3 if s.handshake and s.handshake.client_hello else None,
+          s.handshake.server_hello.ja3s if s.handshake and s.handshake.server_hello else None)
+         for s in scored],
+        contaminated=contaminated,
+    )
+
+    # -- S8 -----------------------------------------------------------------
+    for session in sessions:
+        ctx = contexts[session.session_id]
         session.assessment = model.assess(ctx, session.findings)
 
         result = anomaly_stage.detect(
@@ -109,7 +126,6 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
         session.assessment.anomaly_score = result.score
         session.assessment.is_anomalous = result.is_anomalous
         session.assessment.anomaly_reasons = result.reasons
-        all_findings.extend(session.findings)
 
     ordered, _ = priority_stage.prioritise(all_findings, sessions)
 

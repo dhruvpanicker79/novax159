@@ -72,17 +72,61 @@ class FleetBaseline:
     ja3s_counts: Counter = field(default_factory=Counter)
     modal: dict[str, float] = field(default_factory=dict)
     session_count: int = 0
+    #: Sessions actually used to define "normal", after contaminated ones were
+    #: rejected. Reported so the UI can say what the comparison was against.
+    clean_count: int = 0
+    contaminated_count: int = 0
+
+    #: Below this many clean sessions the modal configuration is meaningless,
+    #: so we fall back to using every session and say so.
+    MIN_CLEAN = 3
 
     @classmethod
-    def build(cls, sessions: list[tuple[FeatureVector, str | None, str | None]]) -> FleetBaseline:
-        """`sessions` is (features, ja3, ja3s) for every session in the capture."""
+    def build(cls, sessions: list[tuple[FeatureVector, str | None, str | None]],
+              contaminated: list[bool] | None = None) -> FleetBaseline:
+        """Learn what normal looks like for this capture.
+
+        `sessions` is (features, ja3, ja3s) per session. `contaminated[i]` marks
+        a session that should NOT help define normal - typically one carrying a
+        high-severity finding.
+
+        Two populations, deliberately:
+
+        - **modal configuration** is computed from clean sessions only. Building
+          it from every session lets the attacks define normal, so the more
+          hosts are compromised the less anomalous compromise looks. That is
+          backwards, and it is the unsupervised outlier-rejection stage the KMIP
+          work (Baee et al., 2024) puts ahead of learning - see
+          docs/07_RELATED_WORK.md section 4.
+        - **fingerprint rarity** is computed over ALL sessions, because rarity
+          is a property of the observed population. An attacker's JA3 being rare
+          among everything present is exactly the signal we want; excluding it
+          from its own denominator would hide it.
+        """
+        flags = contaminated or [False] * len(sessions)
+        if len(flags) != len(sessions):
+            flags = [False] * len(sessions)
+
         base = cls(session_count=len(sessions))
-        values: dict[str, list[float]] = {name: [] for name in _PEER_FEATURES}
+
+        # Rarity: every session counts.
         for features, ja3, ja3s in sessions:
             if ja3:
                 base.ja3_counts[ja3] += 1
             if ja3s:
                 base.ja3s_counts[ja3s] += 1
+
+        clean = [s for s, bad in zip(sessions, flags) if not bad]
+        base.contaminated_count = len(sessions) - len(clean)
+        if len(clean) < cls.MIN_CLEAN:
+            # Nothing trustworthy to learn from. Use everything rather than
+            # produce a baseline built on two sessions, and record that we did.
+            clean = list(sessions)
+            base.contaminated_count = 0
+        base.clean_count = len(clean)
+
+        values: dict[str, list[float]] = {name: [] for name in _PEER_FEATURES}
+        for features, _ja3, _ja3s in clean:
             for name in _PEER_FEATURES:
                 values[name].append(float(getattr(features, name)))
         for name, column in values.items():
@@ -115,7 +159,8 @@ def peer_deviation(features: FeatureVector, baseline: FleetBaseline) -> tuple[fl
     Deliberately simple and deliberately explainable: it returns the names of
     the settings that differ, which is the part an analyst reads.
     """
-    if not baseline.modal or baseline.session_count < 3:
+    # Guard on the CLEAN population: that is what the modal values came from.
+    if not baseline.modal or baseline.clean_count < FleetBaseline.MIN_CLEAN:
         return 0.0, []
 
     differing: list[str] = []

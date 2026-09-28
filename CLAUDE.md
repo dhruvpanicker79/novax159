@@ -145,12 +145,13 @@ reference set:
 
 - **Durumeric et al., IMC 2015** — STARTTLS stripping *in the wild*; 7 countries with >20% of inbound Gmail in
   cleartext. The canonical citation for USP-02.
-- **Ashiq, Fiebig & Chung, IMC 2025** — 87M domains; **MTA-STS at 0.3% adoption, 29.6% of those misconfigured.**
+- **Ashiq, Fiebig & Chung, IMC 2025** — 87M domains; **MTA-STS at 0.07% of `.com` / 0.12% of `.org`,
+  29.6% of the 68K domains publishing a record misconfigured.** (Corrected from 0.3% — see `docs/08_PITCH.md` §12.)
 - **Siavoshani et al., Soft Computing 2023** — which TLS handshake fields leak most; backs the feature vector.
 - **Singh, Kashyap & Cherukuri, arXiv 2505.16261** — SHAP anomaly detection on encrypted traffic; backs USP-04.
 - **Dubey & Varshney, arXiv 2606.16473** — 49.3% support hybrid PQ key exchange, **zero PQ certificates.**
 
-**Two findings should change priorities:** MTA-STS at 0.3% with a third broken makes USP-11 the highest-value
+**Two findings should change priorities:** MTA-STS under 0.15% with a third broken makes USP-11 the highest-value
 unbuilt feature. And USP-05's claim should become two-part — *key exchange is migrating, certificates have not
 started* — which the parser can already report.
 

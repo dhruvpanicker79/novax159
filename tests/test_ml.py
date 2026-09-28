@@ -281,6 +281,55 @@ def test_conforming_session_is_not_anomalous():
     assert result.score < 0.3
 
 
+def test_baseline_excludes_contaminated_sessions():
+    """The bug this guards against inverts the detector.
+
+    If a majority of the fleet is compromised and every session helps define
+    "normal", the attack becomes the norm and the healthy hosts are what look
+    anomalous. The more hosts are compromised, the less compromise stands out.
+    """
+    attacks = [(terrible(), f"bad{i}", f"bads{i}") for i in range(10)]
+    good = [(healthy(), f"ok{i}", f"oks{i}") for i in range(4)]
+    fleet = attacks + good
+    flags = [True] * len(attacks) + [False] * len(good)
+
+    poisoned = anomaly.FleetBaseline.build(fleet)
+    cleaned = anomaly.FleetBaseline.build(fleet, contaminated=flags)
+
+    assert cleaned.clean_count == 4
+    assert cleaned.contaminated_count == 10
+    assert poisoned.contaminated_count == 0
+
+    attack_on_poisoned, _ = anomaly.peer_deviation(terrible(), poisoned)
+    attack_on_cleaned, _ = anomaly.peer_deviation(terrible(), cleaned)
+    healthy_on_poisoned, _ = anomaly.peer_deviation(healthy(), poisoned)
+
+    # Poisoned: the attack looks normal and the healthy host looks odd.
+    assert attack_on_poisoned < healthy_on_poisoned
+    # Cleaned: the attack is the outlier again.
+    assert attack_on_cleaned > attack_on_poisoned
+
+
+def test_rarity_still_counts_every_session():
+    """Rarity is a property of the observed population, so contaminated
+    sessions must stay in its denominator - excluding an attacker's fingerprint
+    from its own count would hide exactly what we want to surface."""
+    fleet = [(healthy(), "common", "s")] * 9 + [(terrible(), "unique", "s2")]
+    base = anomaly.FleetBaseline.build(fleet, contaminated=[False] * 9 + [True])
+    assert base.session_count == 10, "all sessions counted for rarity"
+    assert base.clean_count == 9
+    assert base.rarity("unique") == 1.0
+
+
+def test_baseline_falls_back_when_nothing_is_clean():
+    """A baseline built on one session is worse than none. Use everything and
+    record that we did, rather than inventing a normal from noise."""
+    fleet = [(terrible(), f"a{i}", f"b{i}") for i in range(6)]
+    base = anomaly.FleetBaseline.build(fleet, contaminated=[True] * 6)
+    assert base.clean_count == 6, "fell back to the full population"
+    assert base.contaminated_count == 0, "and said so"
+
+
 def test_baseline_needs_enough_sessions_to_judge():
     base = anomaly.FleetBaseline.build(_fleet(2))
     score, reasons = anomaly.peer_deviation(terrible(), base)

@@ -76,8 +76,13 @@ def train(samples: list[corpus.Sample], out_dir: Path) -> dict[str, float]:
     X = np.array([s.features.as_row() for s in samples], dtype=float)
     y = np.array([s.label.rank for s in samples], dtype=int)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, random_state=42, stratify=y)
+    # Split the INDICES alongside the arrays. `train_test_split` shuffles, so
+    # slicing `samples` by position afterwards gives a different set from
+    # X_test - and one that overlaps the training data, which silently
+    # flatters the model in the baseline comparison below.
+    indices = np.arange(len(samples))
+    X_train, X_test, y_train, y_test, _idx_train, idx_test = train_test_split(
+        X, y, indices, test_size=0.25, random_state=42, stratify=y)
 
     clf = GradientBoostingClassifier(
         n_estimators=300, learning_rate=0.08, max_depth=4, random_state=42)
@@ -102,17 +107,21 @@ def train(samples: list[corpus.Sample], out_dir: Path) -> dict[str, float]:
     from .classifier import baseline_score
     from ..rules.pack import RuleContext, evaluate
 
-    test_samples = [s for s in samples][-len(X_test):]
+    test_samples = [samples[i] for i in idx_test]
+    # Batch the predictions; one call per row is needlessly slow on 2,500 rows.
+    proba_test = clf.predict_proba(np.array([s.features.as_row()
+                                             for s in test_samples], dtype=float))
+    ranks = np.array([int(c) for c in clf.classes_], dtype=float) / 4.0
+
     baseline_err = 0.0
     model_err = 0.0
-    for i, s in enumerate(test_samples[:500]):
+    for s, row in zip(test_samples, proba_test):
         ctx = RuleContext(s.features, port=s.port, port_role=s.port_role)
         b_risk, _ = baseline_score(evaluate(ctx))
-        m_risk = float(sum(p * (c / 4.0) for p, c in
-                           zip(clf.predict_proba([s.features.as_row()])[0], clf.classes_)))
+        m_risk = float((row * ranks).sum())
         baseline_err += abs(b_risk - s.target)
         model_err += abs(m_risk - s.target)
-    n = min(500, len(test_samples)) or 1
+    n = len(test_samples) or 1
     metrics["baseline_mae"] = round(baseline_err / n, 4)
     metrics["model_mae"] = round(model_err / n, 4)
 
@@ -127,13 +136,33 @@ def train(samples: list[corpus.Sample], out_dir: Path) -> dict[str, float]:
         print(f"[train] shap unavailable ({type(exc).__name__}); "
               f"explanations will use rule attribution")
 
-    # Anomaly detection trains on the healthy majority only. Fitting on the
-    # full corpus would teach it that compromised sessions are normal.
+    # -- anomaly detector (D17) --------------------------------------------
+    # Fit on the healthy archetypes of the TRAINING split only. Two reasons:
+    # fitting on the full corpus leaks test rows into the model, and fitting on
+    # all archetypes teaches it that compromised sessions are normal - the same
+    # mistake the fleet baseline used to make (ADR-0019).
+    HEALTHY = ("modern", "standard", "dated")
+    train_samples = [samples[i] for i in _idx_train]
     healthy = np.array(
-        [s.features.as_row() for s in samples
-         if s.archetype in ("modern", "standard", "dated")], dtype=float)
+        [s.features.as_row() for s in train_samples if s.archetype in HEALTHY],
+        dtype=float)
     iso = IsolationForest(n_estimators=200, contamination=0.05, random_state=42)
     iso.fit(healthy)
+
+    # Evaluate it. D17 previously had no numbers at all: "we have an anomaly
+    # detector" is not a claim until it is measured. Anything outside the
+    # healthy archetypes counts as a true anomaly.
+    is_anomalous = np.array([s.archetype not in HEALTHY for s in test_samples])
+    # decision_function is negative for outliers; negate so higher = stranger.
+    anomaly_scores = -iso.decision_function(X_test)
+    if is_anomalous.any() and not is_anomalous.all():
+        metrics["anomaly_roc_auc"] = round(
+            float(roc_auc_score(is_anomalous, anomaly_scores)), 4)
+        k = max(1, int(0.10 * len(anomaly_scores)))
+        top_k = np.argsort(anomaly_scores)[::-1][:k]
+        metrics["anomaly_precision_at_10pct"] = round(
+            float(is_anomalous[top_k].mean()), 4)
+        metrics["anomaly_base_rate"] = round(float(is_anomalous.mean()), 4)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump({"model": clf, "explainer": explainer,
@@ -144,7 +173,9 @@ def train(samples: list[corpus.Sample], out_dir: Path) -> dict[str, float]:
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
 
     print("\nclassification report (held out):")
-    print(classification_report(y_test, y_pred,
+    # Pin the labels: if a severity happens not to appear in the test split,
+    # passing five target_names against four observed classes raises.
+    print(classification_report(y_test, y_pred, labels=[0, 1, 2, 3, 4],
                                 target_names=["info", "low", "medium", "high", "critical"],
                                 zero_division=0))
     return metrics

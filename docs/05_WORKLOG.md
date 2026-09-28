@@ -290,3 +290,192 @@ is absent; D21 is the interactive HTML dashboard.
 2. The FastAPI service, so a PCAP can be uploaded rather than passed on the command line.
 3. WSL2 for `ml/train.py` and Playwright — the last two blocked pieces.
 4. The Docker testbed for real captures alongside the synthetic corpus.
+
+---
+
+## 2026-09-26 — pitch research (`docs/08_PITCH.md`)
+
+**Done:**
+- Read six SIH decks that got through (SIH1714 Asha, SIH25022 Margdarshak, SIH25002 PURVA, SIH1669 Transformo
+  Docs, SIH1679 CIS Kurukshetra, SIH1683 DrishyamAI) and extracted what separates them mechanically: a named
+  product, a number on every slide, a *table* on the references slide rather than a link dump, live links, the
+  Challenge→Solution two-column feasibility layout, and named integration with existing government systems.
+  The closest analogue to us — SIH1679, also Blockchain & Cybersecurity — is the weakest of the six.
+- **Verified every paper our docs cite.** All five external papers are real and the figures we quote are
+  accurate, with one exception: MTA-STS adoption is 0.07% of `.com` / 0.12% of `.org`, not 0.3%. Corrected in
+  `CLAUDE.md`. The 29.6% misconfiguration figure was right.
+- Added new sources that matter: Holz et al. NDSS 2016 (the reference mail-TLS measurement study), Loizou &
+  Ghadafi Aug 2026 (**44.0% of web endpoints quantum-ready vs 6.4% of mail** — the strongest single statistic
+  available to this pitch), INTACT arXiv 2602.21252 (crypto violations as policy breaches, which is our design),
+  and India's PQC migration roadmap (DST/NQM, Feb 2026: **crypto inventory for CII by 2027, CBOM from vendors
+  FY 2027–28**).
+- **Found out who set the PS.** SIH26159 is from **NTRO**. Recorded what that implies for the pitch: offline,
+  air-gapped, evidence-grade, no cloud. Our one-dependency build is the differentiator, not an apology.
+- **Found at least five other public repos working PS 159.** Two are substantial; one claims 100% precision and
+  recall on a labelled corpus with a 19-rule engine. Competitive analysis in §10 of the pitch doc.
+
+**What this changes:**
+1. `scripts/evaluate.py` is now the highest-priority item by a wide margin — a rival is already publishing
+   accuracy numbers and ours do not exist.
+2. USP-11 (DANE/MTA-STS) is probably a stated PS requirement, not an extra: the PS accepts "a packet capture,
+   a domain name, or both".
+3. A CBOM export has a government deadline attached to it (FY 2027–28), which makes it the best-justified
+   unbuilt feature.
+
+**Next:** wire up `evaluate.py`; produce the before/after severity screenshot pair for slide 2; pick the name.
+
+---
+
+## 2026-09-27 — full deck content, sourced (`docs/09_DECK_CONTENT.md`)
+
+**Done:** all five content slides written with a published source behind every line. Eight new papers pulled and
+read for numbers, four of which change what we say:
+
+- **Poddebniak et al., USENIX Security 2021** — the citation USP-01 was missing. States the role asymmetry
+  directly: submission and retrieval are more critical *because they carry user credentials*. Also gives the best
+  number on slide 2: **40+ STARTTLS flaws across 28 clients / 23 servers, only 3 clients clean, and 320,000
+  servers (2% of all mail servers) vulnerable to credential-stealing command injection**.
+- **Mayer et al., ARES 2016** — full IPv4, 20M IP/port pairs, 10 billion handshakes: **65% of SMTP hosts
+  self-signed**, only **33-37%** validating on mail-access ports, **15-17%** of POP3/IMAP offering static RSA as
+  their only key exchange. The evidence base for the certificate and cipher rules.
+- **Lee et al., USENIX Security 2022** — DANE in SMTP: **>30% of TLSA records unvalidatable, 87% incorrect key
+  rollovers**, attributed by the authors to *the lack of automated tooling*. A peer-reviewed request for USP-11.
+- **Sommer & Paxson, IEEE S&P 2010** — base-rate problem and semantic gap. Makes our "facts deterministic, only
+  the ranking learned" architecture look deliberate, and gives role-aware severity a false-positive argument.
+
+Also added: **Dreger et al. USENIX Sec 2006** (port-independent protocol detection, which is exactly S2),
+**Georgiev CCS 2012** + **Brubaker S&P 2014** (certificate validation is broken because of library APIs — the
+defence for writing our own parser), **Anderson/McGrew 2018** (TLS metadata alone attributes malware families),
+**Li et al. USENIX Sec 2016** (notices carrying remediation steps 56.5% more effective after two days, though
+not significant after correction — quote the caveat), and the primary sources for XGBoost, Isolation Forest,
+SHAP and robust covariance estimation.
+
+**The novelty claim, now checkable against the literature:** every large study of email encryption scanned
+servers from the outside — ZMap sweeps, DNS scans, active probes. Not one could tell an individual operator what
+happened to their own mail. Holz 2016 is the only one that used passive monitoring at all, and that was one
+research vantage point describing the ecosystem.
+
+**Slide 6 is built as Code Omega's was** (Paper / Approach / Dataset / Accuracy) in three tables: measurement
+evidence, method evidence with real accuracy figures, and our own numbers — which are still blank because
+`scripts/evaluate.py` is a stub.
+
+**Next:** `evaluate.py`, then the before/after severity screenshot for slide 2.
+
+---
+
+## 2026-09-27 (later) — research paper, first iteration (`docs/10_RESEARCH_PAPER.md`)
+
+**Done:** full research document in the SIH research-doc format taken from the PURVA (SIH25002) submission — 19
+numbered sections plus appendices A-F, abstract, keywords, contents, 57 numbered references. **29 pages, ~13,000
+words**, rendered to `out/10_RESEARCH_PAPER.pdf` with the project's own `scripts/md_to_pdf.py`.
+
+Appendices are generated from the code rather than written from memory: the full 34-rule catalogue with
+categories, base severities and primary standards; the 51-field feature vector grouped and named exactly as
+`schema.FeatureVector` declares it; the JSON report structure; and the evaluation protocol.
+
+**Two discrepancies found against our own docs while writing it:**
+1. The rule pack holds **34 rules**, not 33. `len(pack.RULES) == 34`. `CLAUDE.md` and several docs say 33.
+2. `CLAUDE.md` attributes arXiv 2606.16473 to "Dubey & Varshney"; I could not confirm those authors, so the
+   paper cites it by title and identifier. Its figures (49.3% hybrid KEX, 0% PQ certificates) are correct.
+
+**Stated honestly throughout, in four places:** `scripts/evaluate.py` is a stub, so the paper reports no
+precision or recall and does not claim to know them; the classifier is untrained; the anomaly baseline is still
+single-pass; and the dashboard's visual design has never been reviewed by a human. Section 16.1 lists all seven
+current gaps. A research document that hides its own gaps is worth less than one that names them, and NTRO
+evaluators will find them anyway.
+
+**Placeholders left for the team:** `[TEAM NAME]`, `[TEAM ID]`, member list if required.
+
+**Next:** `scripts/evaluate.py`, so section 4.3 and Appendix E can carry real numbers.
+
+---
+
+## 2026-09-27 (evening) — paper formatting (`scripts/md_to_paper.py`)
+
+**Done:** new renderer that puts the research document in the same format as the reference SIH research papers
+(ITerative Bytes, SIH25002). ADR-0019 records why it is a separate script rather than a flag.
+
+- **Times New Roman throughout**, registered as a TrueType family so the em dash, rupee sign and arrows render;
+  falls back to built-in Times and degrades those characters, as `md_to_pdf.py` already does.
+- **Title page** carrying title, italic subtitle, the centred metadata block, the abstract and the keywords —
+  all on page 1, as the reference has it.
+- **Generated contents** with dotted leaders and real page numbers, three levels, via `multiBuild` and an
+  `afterFlowable` hook. Page numbers cannot be known until the document has been laid out once, hence two passes.
+- **Running header** (`SIH 2026  CyberKavach`) with a rule, and centred page numbers. No header on page 1.
+- Heading sizes follow LaTeX article at 10pt: 14.4 / 12 / 10.95pt, bold, flush left.
+
+**34 pages.** `python scripts/md_to_paper.py docs/10_RESEARCH_PAPER.md --out out/`
+
+**One bug found only by looking at it.** The abstract was emitting one `Paragraph` per source line, so every
+hard-wrapped line was justified independently and orphan words sat alone ("can", "been", "payload,"). Text
+extraction showed nothing wrong; it was visible only in the rendered page. Fixed by folding lines into
+paragraphs. Worth remembering given the dashboard has the same unreviewed-visual-design risk recorded on
+2026-09-24.
+
+**Also:** abstract tightened to ~320 words and keywords to six so that page 1 holds the whole front matter, and
+the per-section page breaks were removed — the reference lets sections flow on, which is what LaTeX does.
+
+**Still placeholders:** `[TEAM NAME]`, `[TEAM ID]`.
+
+---
+
+## 2026-09-28 — user-flow diagram corrected against the code
+
+Reviewed the team's draft slide-2 user flow (SIH 2026 template export) against what the system actually does and
+rebuilt it as `docs/assets/slide2_userflow.svg`.
+
+**Three boxes in the draft would have damaged us in front of NTRO:**
+1. `MITM ATTACK (Downgrade if enabled)` → `FORCE PLAINTEXT DOWNGRADE` read as though CyberKavach *performs* the
+   downgrade. We are passive. Replaced with attack **evidence detected, never caused**.
+2. `PERFORM IN-BAND INSPECTION` — "in-band" means interception. Now **passive handshake inspection, nothing
+   decrypted**.
+3. `MAIL STREAM CAPTURE` / `Analyst Specifies Device/Filter` / `Receive Data Stream` implied live capture from an
+   interface. We ingest a file. Removed.
+
+**Claims with no code behind them, removed:** `EXPORT TO SIEM`, `Cert Added to DB`, `DB Updated`, `DB Archival` —
+grepped, there is no database and no SIEM integration. Output is `report.json` + `report.html`, so the JSON is
+described as SIEM-ingestible rather than integrated. `web/src/` was cited for the dashboard; it holds one
+generated `schema.ts` and no UI (ADR-0018 rejected a build-step frontend).
+
+**Logic error fixed:** `Anomaly detected? NO → INCIDENT CLOSED (False Positive)`. No anomaly is not a false
+positive.
+
+**Four USPs were missing from the flow and are now on it:** port-role assignment, the OPAQUE_TLS13 / `?` grade
+path (which the PS itself requires), evidence linkage, and banner-led protocol identification.
+
+**Module citations verified against the tree** — the draft's five were all real; `proto/identify.py` did not
+exist and is now `proto/detect.py + roles.py`, and `features/` has no submodule so the package is cited.
+
+---
+
+## 2026-09-28 — anomaly baseline fix, and the training path
+
+**Done:**
+- **Fixed the poisoned anomaly baseline** (ADR-0019). `FleetBaseline.build()` now rejects contaminated sessions
+  before computing the modal configuration, while keeping every session in the fingerprint-rarity denominator.
+  `pipeline.py` reordered so S6 runs before the baseline. On the demo capture, 6 of 13 sessions are now excluded
+  from defining normal.
+- **Reviewed `ml/train.py`, which had never been executed, and found three bugs** — see ADR-0020. The worst:
+  `train_test_split` shuffles, so the baseline-vs-model comparison was scoring the model on rows it had trained
+  on. That would have put an unfounded "model beats baseline" number on the metrics slide.
+- Added anomaly evaluation to `train.py`: ROC-AUC and precision at the top 10%. D17 previously had no metrics at
+  all — "we have an anomaly detector" is not a claim until it is measured.
+- `ml/corpus.py` now emits `baseline_risk` per row, making `data/corpus.csv` self-sufficient for training
+  anywhere. 10,000 rows in 0.9 seconds, 2.5 MB.
+- `notebooks/train_models.ipynb`: 20 cells, Colab-ready — classifier, confusion matrix, baseline comparison,
+  Isolation Forest with evaluation, SHAP importances, and joblib bundles in the exact format
+  `RiskModel.load()` expects. Every code cell syntax-checked, and the feature/metadata column split validated
+  against the real CSV.
+- 3 new tests. **171 passing.**
+
+**Also confirmed, before it cost a day: FastAPI cannot run on these machines.** Pydantic v2's `_pydantic_core`
+is blocked — the seventh Smart App Control block. Flask, Starlette, Jinja2 and stdlib `sqlite3` all work.
+`docs/03_ARCHITECTURE.md` and the `api/` stub still specify FastAPI and need updating.
+
+**The bar for the model:** baseline MAE **0.1683** over the 10,000-row corpus. If the trained model does not beat
+that, the baseline is what ships and the slide says so.
+
+**Next:**
+1. Run `notebooks/train_models.ipynb` in Colab (~15 min) → D16/D17 move from PARTIAL to MET.
+2. `scripts/evaluate.py` — still a stub; USP-07 still claims precision and recall we do not have.
+3. The platform layer: Flask + sqlite3 job model, then finding dispositions.

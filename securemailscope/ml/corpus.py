@@ -294,16 +294,25 @@ def write_csv(samples: list[Sample], path: str | Path) -> Path:
     package nor a PCAP -- useful when the only machine with a working scikit-learn
     is not the machine with the repo on it.
     """
+    from ..ml.classifier import baseline_score  # noqa: PLC0415 - avoids a cycle
+    from ..rules.pack import evaluate  # noqa: PLC0415
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     columns = FeatureVector.field_names()
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow([*columns, "port", "port_role", "archetype", "label", "target"])
+        writer.writerow([*columns, "port", "port_role", "archetype",
+                         "label", "target", "baseline_risk"])
         for s in samples:
+            ctx = RuleContext(s.features, port=s.port, port_role=s.port_role)
+            # Precomputed so a training run elsewhere - Colab, a teammate's
+            # laptop - can compare the model against the rule-derived baseline
+            # without needing this package at all. The CSV is self-sufficient.
+            risk, _ = baseline_score(evaluate(ctx))
             writer.writerow([
                 *s.features.as_row(), s.port, s.port_role.value,
-                s.archetype, s.label.value, s.target,
+                s.archetype, s.label.value, s.target, risk,
             ])
     return path
 

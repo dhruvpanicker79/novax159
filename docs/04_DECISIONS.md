@@ -369,3 +369,96 @@ long-term product. It is no longer on the critical path for the demo, which is t
 to inject markup. Values are escaped at render time, the data island is `type="application/json"` so the browser
 does not execute it, and `</` inside the JSON is escaped so the element cannot be closed early. All three are
 pinned by tests.
+
+---
+
+## ADR-0019 — The research paper gets its own renderer, not a flag on `md_to_pdf.py`
+
+**Date:** 2026-09-27 · **Status:** Accepted
+
+**Context.** The submitted research document has to match the format the reference SIH research papers use —
+a LaTeX `article` look: Times serif throughout, a title page carrying the abstract and keywords, a generated
+table of contents with dotted leaders and real page numbers, a running header, centred page numbers.
+`scripts/md_to_pdf.py` produces a deliberately different thing: a sans face, coloured headings, a band across
+the top. That is right for the working documents and wrong for a paper. Neither can be the other with a
+stylesheet swap, because the paper also needs a two-pass build (a table of contents cannot know page numbers
+until the document has been laid out once) and a different document template class.
+
+**Decision.** `scripts/md_to_paper.py` is a separate entry point. It imports `md_to_pdf` — which is also what
+installs the PIL stub (ADR-0012) — and reuses `inline()`, `_table()` and the font discovery, then overrides the
+styles, swaps `SimpleDocTemplate` for a `BaseDocTemplate` with `multiBuild` and an `afterFlowable` hook that
+notifies each heading's page, and adds title-page and front-matter handling.
+
+**Rejected.** A `--style paper` flag on `md_to_pdf.py` — the two differ in document class, build method and
+front-matter handling, so the flag would have branched most of the module. Generating LaTeX and compiling it —
+no TeX distribution on these machines, which is the same constraint that produced the renderer in the first
+place. Hand-formatting in Word — the document changes every time the code does, and a format that cannot be
+regenerated from Markdown will silently go stale.
+
+**Consequence.** `python scripts/md_to_paper.py docs/10_RESEARCH_PAPER.md --out out/` regenerates the paper
+after any edit. The source of truth stays Markdown in git. The two renderers share the parts that are genuinely
+shared and nothing else.
+
+**Note for whoever touches it next:** the abstract handler folds hard-wrapped source lines back into paragraphs.
+A first cut emitted one `Paragraph` per source line, which justified each line separately and left orphan words
+("can", "been", "payload,") stranded on their own lines. It looked broken and the text extraction did not show
+it — it was only visible by rendering the page and looking at it.
+
+---
+
+## ADR-0019 — The anomaly baseline rejects contaminated sessions before learning
+
+**Date:** 2026-09-28 · **Status:** Accepted
+
+**Context.** `ml/anomaly.py` learned "normal" from the modal configuration of the capture — using **every**
+session, including the compromised ones. The KMIP work (Baee et al., 2024) puts an unsupervised outlier-rejection
+stage *ahead* of learning for exactly this reason, and reviewing it against our code exposed the flaw.
+
+The failure mode is not subtle: it inverts the detector. On a fleet where most hosts are compromised, the attack
+configuration becomes the mode, so the attacks stop looking anomalous and the healthy hosts start to. The more
+widespread the compromise, the less it is detected — the opposite of what a detector should do.
+
+**Decision.** `FleetBaseline.build()` takes a `contaminated` flag per session. Two populations, deliberately:
+
+- **modal configuration** — clean sessions only. The pipeline marks a session contaminated when it carries a
+  finding of HIGH or above, which requires S6 to run *before* the baseline is built, so `pipeline.py` was
+  reordered.
+- **fingerprint rarity** — every session. Rarity is a property of the observed population; excluding an
+  attacker's JA3 from its own denominator would hide the signal we want.
+
+If fewer than three clean sessions remain, fall back to the full population and record that in
+`contaminated_count`. A baseline built on two sessions is worse than no baseline.
+
+**Rejected.** Purely unsupervised outlier rejection as in the KMIP paper — we already have rule severities, which
+are a stronger and explainable signal than a distance threshold.
+
+**Consequence.** On the demo capture, 6 of 13 sessions are now excluded from defining normal. Three tests pin the
+behaviour, including one that demonstrates the inversion the old code produced.
+
+---
+
+## ADR-0020 — Models are trained off-machine, from a self-sufficient corpus
+
+**Date:** 2026-09-28 · **Status:** Accepted
+
+**Context.** scikit-learn cannot run on the development machines (ADR-0012), and WSL2 is still not installed.
+`ml/train.py` had therefore never been executed — and reviewing it found two real bugs, one of which silently
+flattered the model.
+
+**Decision.** `ml/corpus.py` now writes a `baseline_risk` column alongside the features and label, making
+`data/corpus.csv` **self-sufficient**: a training run needs the CSV and nothing else from this repository — not
+the rule engine, not the schema. `notebooks/train_models.ipynb` trains both models in Colab and emits joblib
+bundles in exactly the format `RiskModel.load()` expects.
+
+**Bugs found while reviewing code that had never run:**
+
+1. `train_test_split` shuffles, but the baseline comparison sliced `samples` by position afterwards. The two sets
+   did not correspond, and the "test" rows largely overlapped the training data — so the model-beats-baseline
+   claim was measured against rows the model had seen. Now the indices are split alongside the arrays.
+2. The Isolation Forest was fitted on healthy rows from the **whole** corpus, leaking test rows, and was never
+   evaluated at all. It now fits on the training split only and reports ROC-AUC and precision at the top 10%.
+3. `classification_report` was passed five `target_names` without pinning `labels`, which raises if a severity is
+   absent from the test split.
+
+**Consequence.** D16/D17 stay PARTIAL until someone runs the notebook, but the path is now fifteen minutes rather
+than blocked on WSL2. The bar to beat is recorded: **baseline MAE 0.1683** on the 10,000-row corpus.
