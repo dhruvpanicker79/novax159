@@ -84,7 +84,7 @@ they are populated at rule-authoring time. Backfilling on day 4 will not happen.
 | X.509 | `cryptography` | Certificates, key sizes, signature algorithms, SANs |
 | Contract (`schema/`) | **stdlib dataclasses, zero dependencies** | ADR-0009 — everyone imports it, so it must never fail to install |
 | ML | `scikit-learn` + `shap` | CPU only, no GPU, no deep learning |
-| Backend | `FastAPI` + SQLite | Upload, job progress over SSE, results |
+| Backend | **`Flask` + stdlib `sqlite3`** | FastAPI is UNUSABLE here: Pydantic v2's `_pydantic_core` is blocked (ADR-0021). Flask, Starlette and `sqlite3` all work |
 | Reports | `Jinja2` → `Playwright` print-to-PDF | Avoids the WeasyPrint/GTK install problem on Windows |
 | Frontend | Next.js + Tailwind + shadcn/ui + framer-motion + Recharts | Fast to a polished dark SOC aesthetic |
 | Testbed | `docker-compose` + `openssl` + Postfix/Dovecot | Generates the labelled corpus (USP-07) |

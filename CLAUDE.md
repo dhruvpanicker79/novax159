@@ -110,9 +110,14 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 | Pillow (`_imaging`) | PDF renderer stubs PIL before importing ReportLab |
 | git's `libcurl-4.dll` | **`git push` fails from here** |
 | node / npm (never installed) | Dashboard is one self-contained HTML file (ADR-0018) |
+| **`pydantic` / `fastapi`** (`_pydantic_core`) | **Use Flask + stdlib `sqlite3`** (ADR-0021) |
 
-`import cryptography` *succeeds* while `from cryptography import x509` fails — **test the actual call path, not the
-import.** `dpkt` is pure Python and works fine.
+**Test the call path, not the import.** This has bitten twice: `import cryptography` succeeds while
+`cryptography.x509` fails, and `import reportlab` fails only because it imports Pillow. Before adopting any
+library, run the thing you actually intend to call.
+
+**Known good:** `dpkt`, `flask`, `starlette`, `jinja2`, `reportlab` (with the PIL stub), and stdlib
+`sqlite3`. All pure Python or degradable.
 
 **WSL2 is not installed.** It is the fix for the ML training path and remains the top environment task.
 

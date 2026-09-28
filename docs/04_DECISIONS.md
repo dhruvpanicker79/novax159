@@ -462,3 +462,32 @@ bundles in exactly the format `RiskModel.load()` expects.
 
 **Consequence.** D16/D17 stay PARTIAL until someone runs the notebook, but the path is now fifteen minutes rather
 than blocked on WSL2. The bar to beat is recorded: **baseline MAE 0.1683** on the 10,000-row corpus.
+
+---
+
+## ADR-0021 — Flask, not FastAPI; stdlib sqlite3 for persistence
+
+**Date:** 2026-09-28 · **Status:** Accepted (supersedes the backend row in ADR-0002)
+
+**Context.** `docs/03_ARCHITECTURE.md` and the `api/` stub both specified FastAPI. Before building against it, the
+call path was tested rather than the import:
+
+```
+python -c "import fastapi"
+ImportError: DLL load failed while importing _pydantic_core:
+An Application Control policy has blocked this file.
+```
+
+FastAPI depends on Pydantic v2, which ships a compiled Rust core. That is the **seventh** Smart App Control block
+on this project. Flask, Starlette, Jinja2 and stdlib `sqlite3` were all tested and all work.
+
+**Decision.** The HTTP service is **Flask**. Persistence is **stdlib `sqlite3`** — no ORM, no migration framework,
+no new dependency of any kind.
+
+**Rejected.** Starlette — works, but async adds friction for a beginner team and buys nothing here. Waiting for
+WSL2 — it has slipped for five days. Pydantic v1 — unmaintained, and FastAPI's modern versions require v2.
+
+**Consequence.** Had this not been checked first, it would have been discovered mid-build. The general lesson is
+already in CLAUDE.md and is now proven a second time: **on these machines, test the call path, not the import.**
+`import cryptography` succeeds while `cryptography.x509` fails; `import pydantic` fails outright but only when the
+model class is touched.
