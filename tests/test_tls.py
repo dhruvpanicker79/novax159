@@ -305,6 +305,42 @@ def test_pipeline_fires_crypto_rules_on_a_weak_session():
         assert expected in ids, (expected, ids)
 
 
+def test_intersection_anomaly_needs_corroboration_end_to_end():
+    """A legacy server is not an attack.
+
+    `imaps_implicit_weak` offers RC4 alongside modern suites and the server
+    picks RC4 — weaker than was available, so the raw intersection signal is
+    true. But there is no DOWNGRD sentinel and no fallback SCSV, so it must NOT
+    be reported as attack evidence: a modern client offers modern suites to
+    everything, so every old server would trip it. The deprecated-version and
+    weak-cipher rules already say what is wrong. See ADR-0023.
+    """
+    import tempfile
+
+    from securemailscope.pipeline import analyse
+
+    out = Path(tempfile.mkdtemp()) / "weak.pcap"
+    synth.write_pcap(out, [synth.imaps_implicit_weak()])
+    report = analyse(out)
+    ids = {f.rule_id for f in report.prioritised_findings}
+    assert "ATTACK-CIPHER-INTERSECTION-ANOMALY" not in ids
+    assert "TLS-WEAK-CIPHER-RC4" in ids, "the real problem is still reported"
+
+
+def test_intersection_anomaly_fires_when_corroborated_end_to_end():
+    """With the sentinel and fallback SCSV present, it is evidence."""
+    import tempfile
+
+    from securemailscope.pipeline import analyse
+
+    out = Path(tempfile.mkdtemp()) / "down.pcap"
+    synth.write_pcap(out, [synth.imaps_downgrade()])
+    report = analyse(out)
+    ids = {f.rule_id for f in report.prioritised_findings}
+    assert "ATTACK-CIPHER-INTERSECTION-ANOMALY" in ids
+    assert "ATTACK-DOWNGRADE-SENTINEL" in ids
+
+
 def test_healthy_session_stays_clean_end_to_end():
     """The false-positive guard that matters most for the demo."""
     import tempfile

@@ -127,10 +127,10 @@ library, run the thing you actually intend to call.
 
 ## 6. Known gaps, in priority order
 
-1. **`scripts/evaluate.py` is a stub** (raises `NotImplementedError`). USP-07 claims *"we can tell you our
-   precision and recall"* and **the numbers do not exist.** Highest priority — a claimed differentiator with no
-   data is worse than not claiming it. Everything needed is present: the manifest states `expected_findings` per
-   capture, the pipeline produces actual findings. It is a comparison loop.
+1. ~~`scripts/evaluate.py`~~ **done.** USP-07 has numbers: precision 1.00, recall 1.00, severity
+   accuracy 1.00 over 14 captures and 20 rules. Quote it as *no disagreement with independently-derived
+   ground truth on a 13-capture synthetic corpus*, never as "our tool is perfect". The first run found
+   two real false positives (ADR-0023), which is what makes the figure worth anything.
 2. **`securemailscope/llm/` is a stub** — USP-04 layer 3. O02 is otherwise complete.
 3. **`securemailscope/api/` is a stub** — no FastAPI service; the CLI is the only entry point.
 4. **No trained model** — needs WSL2 **or Colab** (`ml/corpus.py` exports CSV; Colab is the faster path).

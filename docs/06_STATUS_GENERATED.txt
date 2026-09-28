@@ -99,13 +99,13 @@ building report from the corpus...
 
 [x] D18      Prioritised security findings
         MET
-        32 findings ranked by severity, then exploitability, blast radius and breadth, each
+        30 findings ranked by severity, then exploitability, blast radius and breadth, each
         with a written rationale
         -> ml/priority.py
 
 [x] D19      Comprehensive posture assessment
         MET
-        fleet grade D (54.7/100) across 11 hosts, with per-host rollups and capping rules
+        fleet grade D (55.4/100) across 11 hosts, with per-host rollups and capping rules
         -> pipeline.py
 
 [~] D20      JSON / PDF / HTML export
@@ -128,7 +128,7 @@ building report from the corpus...
 
 [~] O02      Mitigation recommendations
         PARTIAL
-        32/32 findings carry remediation, 16 with config snippets. The LLM narrative layer
+        30/30 findings carry remediation, 14 with config snippets. The LLM narrative layer
         (USP-04 layer 3) is NOT built
         -> rules/pack.py
 
@@ -138,7 +138,7 @@ building report from the corpus...
 
 [x] USP-01   Role-aware severity engine
         MET
-        12 findings adjusted by port role, each with a written justification; 1 rule(s)
+        10 findings adjusted by port role, each with a written justification; 1 rule(s)
         produced opposite verdicts on different roles: ['CERT-EXPIRED-SELF-SIGNED']
 
 [x] USP-02   Attack-evidence layer
@@ -149,7 +149,7 @@ building report from the corpus...
 
 [x] USP-03   Evidence-linked findings
         MET
-        32/32 findings carry capture hash, stream id, frame numbers and byte offsets
+        30/30 findings carry capture hash, stream id, frame numbers and byte offsets
 
 [~] USP-04   Three-layer explainable AI
         PARTIAL
@@ -166,11 +166,12 @@ building report from the corpus...
         4/4 rendered: ['soc', 'forensics', 'incident_response', 'administrator']; all share
         one analysis
 
-[~] USP-07   Ground-truth testbed and measured accuracy
-        PARTIAL
-        manifest with 18 labelled captures exists; the synthetic corpus generates and the
-        pipeline runs over it. BUT scripts/evaluate.py still raises NotImplementedError, so
-        precision and recall are NOT measured. This is the weakest claim in the deck right now
+[x] USP-07   Ground-truth testbed and measured accuracy
+        MET
+        13 scenarios with ground truth derived from their configuration, not from the tool's
+        output. precision 1.0, recall 1.0, severity accuracy 1.0, protocol id 1.0 across 20
+        rules. Quote as 'no disagreement with independently-derived ground truth on a
+        synthetic corpus', not as perfection. Re-run: python scripts/evaluate.py
 
 [x] USP-08   Compliance report card
         MET
@@ -190,6 +191,6 @@ building report from the corpus...
         NOT MET
         not built; needs DNS extraction from the capture
 
-  met       25   D01, D02, D03, D04, D05, D06, D07, D08, D09, D10, D11, D12, D13, D14, D15, D18, D19, D21, O01, USP-01, USP-02, USP-03, USP-05, USP-06, USP-08
-  partial    7   D16, D17, D20, O02, USP-04, USP-07, USP-09
+  met       26   D01, D02, D03, D04, D05, D06, D07, D08, D09, D10, D11, D12, D13, D14, D15, D18, D19, D21, O01, USP-01, USP-02, USP-03, USP-05, USP-06, USP-07, USP-08
+  partial    6   D16, D17, D20, O02, USP-04, USP-09
   not met    2   USP-10, USP-11

@@ -115,19 +115,34 @@ def attach(session: MailSession, flow: ReassembledFlow) -> MailSession:
     # -- attack evidence that needs both halves (USP-02) -------------------
     downgrade = bool(server_hello and server_hello.downgrade_sentinel)
     fallback = bool(client_hello and client_hello.fallback_scsv)
-    if downgrade or fallback or analysis.cipher_intersection_anomaly:
+
+    # The intersection anomaly requires CORROBORATION before it counts as
+    # attack evidence (ADR-0023). On its own it fires on every legacy server:
+    # a modern client offers modern suites to everything, so an old server
+    # always "selects something weaker than was available". That is neglect,
+    # not an attack, and the deprecated-version and weak-cipher rules already
+    # report it. Claiming attack evidence there is a false positive of the
+    # worst kind - it alleges someone is attacking you.
+    #
+    # Corroboration means an explicit protocol-level downgrade signal: the RFC
+    # 8446 DOWNGRD sentinel, or TLS_FALLBACK_SCSV, which a client only sends
+    # when it is retrying after a handshake failed.
+    corroborated = analysis.cipher_intersection_anomaly and (downgrade or fallback)
+
+    if downgrade or fallback or corroborated:
         evidence = session.attack_evidence or AttackEvidence()
         evidence.downgrade_sentinel_present = downgrade
         evidence.fallback_scsv_present = fallback
-        evidence.cipher_intersection_anomaly = analysis.cipher_intersection_anomaly
-        evidence.weakest_selected_over_available = analysis.intersection_detail
+        evidence.cipher_intersection_anomaly = corroborated
+        evidence.weakest_selected_over_available = (
+            analysis.intersection_detail if corroborated else None)
         if downgrade:
             evidence.corroborating_signals.append(
                 "RFC 8446 downgrade sentinel present in ServerHello.random")
         if fallback:
             evidence.corroborating_signals.append(
                 "client sent TLS_FALLBACK_SCSV, indicating a previous handshake failed")
-        if analysis.intersection_detail:
+        if corroborated and analysis.intersection_detail:
             evidence.corroborating_signals.append(analysis.intersection_detail)
         # A sentinel is the server stating a fact; an intersection anomaly is
         # an inference. Confidence reflects which we actually have.

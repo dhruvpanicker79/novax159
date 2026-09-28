@@ -521,3 +521,41 @@ to resolved. The offered buttons changed with each state, the audit log recorded
 `/api/training-signal` returned the resolved finding as a labelled example.
 
 **197 tests passing.**
+
+---
+
+## 2026-09-28 (evening) — evaluate.py, and what it immediately found
+
+**Done:**
+- **Rewrote `testbed/manifest.json`.** The old one listed 18 aspirational captures whose names matched nothing
+  `synth.py` produces, which is why `evaluate.py` could not be written against it. It now covers the 13 real
+  scenarios, and every `expect` list was derived by reading each scenario's *configuration* — cipher suite,
+  version, certificate, STARTTLS exchange — and reasoning about what should fire. Each capture carries a
+  `reasoning` field explaining the call, including the rules that must **not** fire and why.
+- **`scripts/evaluate.py`** is no longer a stub. Per-rule precision, recall and F1; severity accuracy against
+  pinned expectations; protocol identification accuracy; throughput. Exits non-zero on any disagreement so it can
+  gate a merge. `scope: fleet` expectations (certificate substitution needs two sessions to one host) are scored
+  against `fleet.pcap` separately.
+- **It found two real false positives on its first run** — see ADR-0023. `ATTACK-CIPHER-INTERSECTION-ANOMALY` was
+  firing on any legacy server, because a modern client offers modern suites to everything. Fixed by requiring
+  corroboration from a DOWNGRD sentinel or TLS_FALLBACK_SCSV.
+- 2 new tests. **199 passing.**
+
+**USP-07 now has numbers:**
+
+| | |
+|---|---|
+| captures matching exactly | 14/14 |
+| rules exercised with no error | 20/20 |
+| precision | 1.00 |
+| recall | 1.00 |
+| severity accuracy (USP-01 role adjustment) | 1.00 |
+| protocol identification accuracy | 1.00 |
+
+**State these honestly.** The corpus is 13 synthetic captures that we authored, exercising 20 of 34 rules. 1.00
+means "no disagreement with independently-derived ground truth on this corpus", not "the tool is perfect". The
+right framing for a judge is the process, not the number: the ground truth was written from the scenario
+configuration rather than from the output, and the first run found a real bug. A corpus that cannot fail is not a
+measurement — and this one did fail, which is what makes the figure worth quoting.
+
+**Next:** real-world PCAPs are now the highest-value corpus work — everything measured so far is self-authored.

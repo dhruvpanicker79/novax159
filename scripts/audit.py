@@ -345,16 +345,34 @@ def usps(report: Report) -> list[Check]:
         MET if len(views) == 4 else PARTIAL,
         f"{len(views)}/4 rendered: {[v.value for v in views]}; all share one analysis")
 
-    # USP-07
-    evaluate = (ROOT / "scripts" / "evaluate.py").read_text(encoding="utf-8")
-    measured = "NotImplementedError" not in evaluate
-    manifest = ROOT / "testbed" / "manifest.json"
-    add("USP-07", "Ground-truth testbed and measured accuracy",
-        PARTIAL,
-        f"manifest with 18 labelled captures exists; the synthetic corpus "
-        f"generates and the pipeline runs over it. BUT scripts/evaluate.py still "
-        f"raises NotImplementedError, so precision and recall are NOT measured. "
-        f"This is the weakest claim in the deck right now")
+    # USP-07 - run the evaluation rather than asserting anything about it.
+    import json as _json
+
+    evaluate_src = (ROOT / "scripts" / "evaluate.py").read_text(encoding="utf-8")
+    if "raise NotImplementedError" in evaluate_src:
+        add("USP-07", "Ground-truth testbed and measured accuracy", MISSING,
+            "scripts/evaluate.py is still a stub, so precision and recall are "
+            "NOT measured. USP-07 claims numbers that do not exist")
+    else:
+        manifest = _json.loads(
+            (ROOT / "testbed" / "manifest.json").read_text(encoding="utf-8"))
+        captures = manifest["captures"]
+        metrics_path = ROOT / "out" / "evaluation.json"
+        if metrics_path.exists():
+            m = _json.loads(metrics_path.read_text(encoding="utf-8"))
+            add("USP-07", "Ground-truth testbed and measured accuracy", MET,
+                f"{len(captures)} scenarios with ground truth derived from their "
+                f"configuration, not from the tool's output. "
+                f"precision {m['precision']}, recall {m['recall']}, "
+                f"severity accuracy {m['severity_accuracy']}, "
+                f"protocol id {m['protocol_id_accuracy']} across "
+                f"{m['rules_exercised']} rules. Quote as 'no disagreement with "
+                f"independently-derived ground truth on a synthetic corpus', not "
+                f"as perfection. Re-run: python scripts/evaluate.py")
+        else:
+            add("USP-07", "Ground-truth testbed and measured accuracy", PARTIAL,
+                f"evaluate.py is implemented against {len(captures)} scenarios but "
+                f"has not been run. Run: python scripts/evaluate.py --json out/evaluation.json")
 
     # USP-08
     compliance = report.fleet.compliance if report.fleet else {}

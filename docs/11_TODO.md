@@ -29,7 +29,9 @@ Nothing in the repo can move these.
 The audit currently reads **25 met / 7 partial / 2 not built**. These four items take it to **31 / 1 / 2**.
 The last partial is D20's PDF, which needs Playwright and is already covered by browser print.
 
-- [ ] **`scripts/evaluate.py`** → closes **USP-07**. *Top code priority.*
+- [x] **`scripts/evaluate.py`** → **closes USP-07.** Precision 1.00, recall 1.00, severity accuracy
+      1.00 across 14 captures and 20 rules. Found two real false positives on its first run
+      (ADR-0023). Manifest rewritten against the real scenarios first.
       It still raises `NotImplementedError`, while USP-07 claims *"unlike almost anyone else, we can tell you our
       precision and recall."* **A claimed differentiator with no data is worse than not claiming it**, and it is
       the first thing a technical judge probes.
