@@ -346,6 +346,17 @@ def test_api_disposition_refuses_an_illegal_transition():
     assert resp.status_code == 409, "well-formed request, refused by the state machine"
 
 
+def test_console_is_served_and_self_contained():
+    """The console must work offline from the service itself - no CDN, no build
+    step, same reasoning as the offline report (ADR-0018)."""
+    body = _client().get("/").get_data(as_text=True)
+    assert body.lstrip().lower().startswith("<!doctype html>")
+    for panel in ('id="drop"', 'id="jobs"', 'id="queue"', 'id="audit"', 'id="snaps"'):
+        assert panel in body, panel
+    for external in ("http://", "https://", "<link ", "src="):
+        assert external not in body, f"external reference in console: {external}"
+
+
 def test_api_samples_endpoint_backs_the_demo():
     """A live upload failing in front of judges is only recoverable if a
     pre-loaded capture is one click away."""

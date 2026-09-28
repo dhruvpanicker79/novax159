@@ -62,7 +62,7 @@ The last partial is D20's PDF, which needs Playwright and is already covered by 
 ## C. The platform layer  —  **built** (ADR-0022)
 
 Everything below shipped. `python -m securemailscope.api` serves it on port 8000; the whole
-workflow was exercised over HTTP end to end. What remains here is the browser UI on top.
+workflow was exercised over HTTP end to end. The browser console is built too: securemailscope/api/console.html, served at /.
 
 This is what makes the demo match the user-flow slide. It closes no deliverables but it is what judges *see*.
 Build order matters — each item depends on the one above.

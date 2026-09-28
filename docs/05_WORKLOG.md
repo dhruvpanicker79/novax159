@@ -509,3 +509,15 @@ the highest-priority slide fix.
 1. The browser UI on top of these endpoints — the one piece of the platform still missing.
 2. `scripts/evaluate.py` (USP-07 still claims numbers we do not have), after rewriting the stale manifest.
 3. Colab training run → D16/D17 to MET.
+
+**Console added.** `securemailscope/api/console.html` - one self-contained page served at `/`, no CDN and no
+build step, same constraint as the offline report. Drop-zone upload, bundled-capture dropdown, live job queue with
+progress, the triage queue with disposition buttons that follow the state machine, posture snapshots with
+finalisation, and the audit log.
+
+**Driven in a real browser, not only in tests:** submitted `fleet.pcap` through the UI, watched the job reach
+completed, report auto-loaded (13 sessions, 32 findings, grade D), then clicked a finding from new to acknowledged
+to resolved. The offered buttons changed with each state, the audit log recorded the transition, and
+`/api/training-signal` returned the resolved finding as a labelled example.
+
+**197 tests passing.**
