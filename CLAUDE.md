@@ -40,7 +40,9 @@ python scripts/evaluate.py                               # measure accuracy; non
 for t in contract ml parsing tls certs report platform linklayer llm drift attacks; do python tests/test_$t.py; done
 ```
 
-**Eight commits are unpushed.** Git cannot push from this machine — see §5.
+**Everything is pushed.** Git works from here now: the `libcurl-4.dll` block only affects
+**HTTPS**, and the remote was moved to **SSH** over Windows' own `ssh.exe`, which Smart App
+Control does not block. `core.sshCommand` is pinned in `.git/config`, so `git push` just works.
 
 ---
 
@@ -136,7 +138,7 @@ when a judge asks "how do you stop it hallucinating?" — the answer is a mechan
 | `cryptography` (`_rust`) | Wrote our own DER/X.509 parser (ADR-0017) |
 | `openssl` | Wrote `testbed/certgen.py` to generate certificates |
 | Pillow (`_imaging`) | PDF renderer stubs PIL before importing ReportLab |
-| git's `libcurl-4.dll` | **`git push` fails from here** |
+| git's `libcurl-4.dll` | HTTPS git fails — **solved**: remote is SSH over `ssh.exe` |
 | node / npm (never installed) | Dashboard is one self-contained HTML file (ADR-0018) |
 | `pydantic` / `fastapi` (`_pydantic_core`) | **Flask + stdlib `sqlite3`** (ADR-0021) |
 
@@ -148,7 +150,10 @@ when a judge asks "how do you stop it hallucinating?" — the answer is a mechan
 **WSL2 is not installed.** Only still needed for the ML training path — and **Colab is the faster route**
 (`notebooks/train_models.ipynb` + `data/corpus.csv`, ~15 min).
 
-**To push:** GitHub Desktop or VS Code's built-in git, which bundle their own networking.
+**To push:** just `git push`. The remote is `git@github.com:...` and `core.sshCommand` points
+at `C:/Windows/System32/OpenSSH/ssh.exe`. If a new clone fails, redo those two settings —
+no GUI client needed. (Note: the sandboxed Bash tool cannot spawn `ssh`; push from
+PowerShell or a normal terminal.)
 
 ---
 

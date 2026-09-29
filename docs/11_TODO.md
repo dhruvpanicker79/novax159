@@ -10,8 +10,9 @@ No dates, no estimates. Ordered by value, with the reason each item matters. Tic
 
 Nothing in the repo can move these.
 
-- [ ] **Push the outstanding commits.** Git cannot push from these machines (`libcurl-4.dll` blocked). Use GitHub
-      Desktop or VS Code's built-in git. This is the only item that risks *losing* work.
+- [x] **Push the outstanding commits.** **Done — 15 commits pushed 29 Sep 2026.** The
+      `libcurl-4.dll` block only affects HTTPS; the remote is now SSH over Windows' own
+      `ssh.exe`, which Smart App Control permits. No GUI client was needed after all.
 - [ ] **Run `notebooks/train_models.ipynb` in Colab** with `data/corpus.csv`. Drop the three output files into
       `models/`. → **D16 and D17 go PARTIAL → MET.** The bar to beat is baseline MAE **0.1683**; if the model
       loses, the notebook says so and the baseline is what ships.
