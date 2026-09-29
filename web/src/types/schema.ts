@@ -42,6 +42,8 @@ export interface Capture {
   first_packet_at: string | null;
   last_packet_at: string | null;
   link_type: string;
+  decoded_frame_count: number;
+  link_layer_note: string;
   analysed_at: string | null;
   tool_version: string;
 }

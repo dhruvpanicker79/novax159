@@ -716,3 +716,73 @@ and JS contain no `http://`, `https://`, `//cdn` or `@import url(`. All charts r
 real snapshots, opened all five session tabs, exercised the global search, acknowledged a finding,
 finalised as admin and was refused as analyst, and repeated the whole sequence against an empty
 database.
+
+---
+
+## ADR-0027 — Link-layer decoding, and never letting an unreadable capture read as clean
+
+**Date:** 2026-09-29 · **Status:** Accepted (extends ADR-0014)
+
+**Context.** S1 decoded exactly one thing: IPv4 over Ethernet. `dpkt.ethernet.Ethernet(buf)` followed by
+`isinstance(ip, dpkt.ip.IP)`. That is correct for the synthetic corpus, because `testbed/synth.py` writes
+Ethernet, and it was never tested against anything else.
+
+Measured against re-wrapped copies of `fleet.pcap`, **five of seven common encapsulations lost every
+single frame**:
+
+| Encapsulation | How you get one | Old path |
+|---|---|---|
+| Ethernet | the corpus | 236/236 |
+| 802.1Q VLAN, QinQ | trunk port | 236/236 (dpkt strips tags) |
+| **Linux cooked (SLL)** | **`tcpdump -i any`** | **0/236** |
+| **Linux cooked v2 (SLL2)** | newer `tcpdump -i any` | **0/236** |
+| **Raw IP** | VPN / tunnel interface | **0/236** |
+| **BSD loopback** | `tcpdump -i lo0` on macOS | **0/236** |
+| **IPv6** | any modern network | **0/236** |
+
+`tcpdump -i any` is the single most common way an administrator captures traffic. Handing its output to
+an Ethernet parser does not raise — it reads the first 16 bytes as a MAC header, produces nonsense,
+fails the `isinstance` check, and drops the frame. The capture then analyses **cleanly**, reports *no
+mail sessions found*, and scores **A+ / 100**.
+
+**That is the worst failure this tool can have.** It is not a crash, it is a confident wrong answer that
+looks exactly like a healthy estate, and it would have happened on stage the first time a judge supplied
+their own capture.
+
+**Decision — three parts.**
+
+**1. `securemailscope/capture/linklayer.py`** decodes Ethernet (with 802.1Q and QinQ), Linux cooked v1
+and v2, raw IPv4 and IPv6, and BSD loopback, and walks the IPv6 extension-header chain to reach the TCP
+segment. Addresses go through `inet_ntop`, not `inet_ntoa`, which is 4-byte only. The link type is read
+from the file rather than assumed. It never raises: a malformed frame is counted, not thrown, because a
+single bad packet must not end a million-packet run.
+
+**2. `testbed/relink.py`** re-wraps an existing capture into every one of those encapsulations. Because
+the TCP payloads are byte-identical, the analysis **must** produce the same findings — so the test is
+invariance, and any difference is a link-layer bug and nothing else. `fleet_ipv6.pcap` maps addresses
+into `2001:db8::/32`, which RFC 3849 reserves for documentation.
+
+**3. A capture-level finding, `ANALYSIS-CAPTURE-NOT-READABLE`**, and a forced `Grade.INCOMPLETE`.
+Decoding more link types is not enough — 802.11, PPP and the rest still yield nothing, and *something
+will always be unsupported*. So when the decode rate collapses, the report says so at HIGH severity and
+**the fleet grade becomes `?` with a score of 0**, never A+. This is ADR-0014 one layer down: absence of
+evidence is not evidence of absence.
+
+**The false positive this introduced, and the fix.** The first version counted *IP-bearing* frames as
+"decoded", so a capture containing only ARP — perfectly readable, simply not mail — was reported as
+unreadable. `Capture.decoded_frame_count` now means *frames whose link layer we could parse*, non-IP
+included. Caught by `test_a_readable_capture_with_no_mail_is_not_flagged`, which exists because this
+project's own rule is that a tool which cries wolf is worse than one that says nothing (USP-01).
+
+**Contract change.** `Capture` gains `decoded_frame_count` and `link_layer_note`. Coverage is evidence,
+so it belongs in the report rather than in a log line. `schema/generated/` and
+`web/src/types/schema.ts` regenerated; `docs/03_ARCHITECTURE.md` updated in the same commit, per the
+documentation rules.
+
+**Rejected.** Scapy (a dependency, and it is slow). Shelling out to `tshark` (not installed, and it
+would move the parsing we deliberately own out of process). Silently ignoring undecodable frames — which
+is what the old code did, and is the entire reason this ADR exists.
+
+**Consequence.** 11 new tests in `tests/test_linklayer.py`. All seven encapsulations now produce
+**13 sessions, 30 findings, grade D** — identical to the Ethernet baseline. `scripts/audit.py` unchanged
+at 26 / 6 / 2; `scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00.

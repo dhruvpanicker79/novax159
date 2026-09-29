@@ -18,6 +18,8 @@ from pathlib import Path
 
 from schema import Capture
 
+from .linklayer import link_name
+
 _CHUNK = 1 << 20
 
 #: pcap (both endiannesses, plus the nanosecond variants) and pcapng.
@@ -80,7 +82,13 @@ def load_capture(path: str | Path) -> Capture:
     count = 0
     with path.open("rb") as fh:
         reader = _reader(fh, fmt)
-        capture.link_type = "ethernet"
+        # Ask the file what link layer it holds. This used to be hard-coded to
+        # "ethernet", which is how a Linux `tcpdump -i any` capture analysed
+        # cleanly and reported nothing at all.
+        try:
+            capture.link_type = link_name(reader.datalink())
+        except Exception:  # noqa: BLE001 - a reader without datalink() is old
+            capture.link_type = "ethernet"
         for ts, _ in reader:
             count += 1
             if first is None:
@@ -93,6 +101,21 @@ def load_capture(path: str | Path) -> Capture:
     if last is not None:
         capture.last_packet_at = datetime.fromtimestamp(last, tz=timezone.utc)
     return capture
+
+
+def datalink_of(capture: Capture) -> int:
+    """The capture's libpcap link type, as a number.
+
+    Read from the file rather than remembered from `load_capture`, so callers
+    that build a `Capture` by hand still get the right answer. Defaults to
+    Ethernet only when the reader cannot say.
+    """
+    path = Path(capture.path)
+    try:
+        with path.open("rb") as fh:
+            return int(_reader(fh, detect_format(path)).datalink())
+    except Exception:  # noqa: BLE001
+        return 1
 
 
 def iter_packets(capture: Capture) -> Iterator[tuple[int, float, bytes]]:

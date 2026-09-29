@@ -27,7 +27,9 @@ from datetime import datetime, timezone
 
 from schema import Capture, Evidence, Flow
 
-from .ingest import iter_packets
+from .ingest import datalink_of, iter_packets
+from .linklayer import (
+    DecodeStats, addresses, decode, link_name)
 
 #: Cap per direction so one pathological flow cannot exhaust memory on a large
 #: capture. 8 MB is far more than any mail session needs; truncation is
@@ -208,11 +210,8 @@ class _Builder:
 
 
 def _endpoints(ip, tcp_seg) -> tuple[tuple[str, int], tuple[str, int]]:
-    import socket  # noqa: PLC0415
-
-    src = (socket.inet_ntoa(ip.src), tcp_seg.sport)
-    dst = (socket.inet_ntoa(ip.dst), tcp_seg.dport)
-    return src, dst
+    src_ip, dst_ip = addresses(ip)          # IPv4 or IPv6, see linklayer
+    return (src_ip, tcp_seg.sport), (dst_ip, tcp_seg.dport)
 
 
 def reassemble(capture: Capture) -> Iterator[ReassembledFlow]:
@@ -227,18 +226,18 @@ def reassemble(capture: Capture) -> Iterator[ReassembledFlow]:
     builders: dict[tuple, _Builder] = {}
     order: list[tuple] = []
 
-    for frame_number, ts, buf in iter_packets(capture):
-        try:
-            eth = dpkt.ethernet.Ethernet(buf)
-        except Exception:  # noqa: BLE001 - a malformed frame must not stop the run
-            continue
+    # One decoder for every link layer we support, and a running tally of what
+    # it could not read. `stats` is attached to the capture afterwards so the
+    # rule pack can refuse to call an undecodable capture clean.
+    datalink = datalink_of(capture)
+    stats = DecodeStats(link_type=datalink, link_name=link_name(datalink))
+    capture.link_type = stats.link_name
 
-        ip = eth.data
-        if not isinstance(ip, dpkt.ip.IP):
+    for frame_number, ts, buf in iter_packets(capture):
+        decoded = decode(buf, datalink, stats)
+        if decoded is None:
             continue
-        segment = ip.data
-        if not isinstance(segment, dpkt.tcp.TCP):
-            continue
+        ip, segment = decoded
 
         src, dst = _endpoints(ip, segment)
         key = tuple(sorted([src, dst]))
@@ -282,6 +281,13 @@ def reassemble(capture: Capture) -> Iterator[ReassembledFlow]:
             stream.base_seq = seq_base
             stream.next_seq = seq_base
         stream.add(seq, payload, frame_number)
+
+    # Record coverage before yielding anything: the pipeline reads these off the
+    # capture, and a generator's tail does not run until it is fully consumed.
+    # Readable, not IP-bearing: a capture full of ARP decoded perfectly, it
+    # simply is not mail. Counting only IP frames flagged it as unreadable.
+    capture.decoded_frame_count = stats.decoded + stats.non_ip
+    capture.link_layer_note = stats.summary()
 
     for key in order:
         builder = builders[key]

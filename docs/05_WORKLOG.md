@@ -675,3 +675,62 @@ a UI one**, so it was left alone and is recorded here for a deliberate call.
 
 **Next:** unchanged — real-world PCAPs, link-layer coverage (IPv6/VLAN/SLL), the Colab training run,
 and settling the project name.
+
+---
+
+## Session 8 — 2026-09-29 · link layers, and the worst failure mode closed
+
+**What changed.** S1 decoded IPv4-over-Ethernet and nothing else. It now decodes Ethernet (with 802.1Q
+and QinQ), Linux cooked capture v1 and v2, raw IPv4 and IPv6, and BSD loopback, walks the IPv6
+extension-header chain, and refuses to grade a capture it could not read. ADR-0027. 211 tests pass;
+`scripts/audit.py` unchanged at **26 / 6 / 2**, `scripts/evaluate.py` unchanged at precision 1.00 /
+recall 1.00.
+
+**Files.** `securemailscope/capture/linklayer.py` (new), `testbed/relink.py` (new),
+`tests/test_linklayer.py` (new, 11 tests), `capture/ingest.py`, `capture/reassemble.py`,
+`pipeline.py`, `schema/models.py` + regenerated contract, `docs/03_ARCHITECTURE.md`.
+
+### The measurement that justified the work
+
+Re-wrapped `fleet.pcap` into seven encapsulations and ran the **old** decode path over each:
+
+```
+  fleet.pcap             236/236  fine
+  fleet_vlan.pcap        236/236  fine          (dpkt strips 802.1Q already)
+  fleet_qinq.pcap        236/236  fine
+  fleet_sll.pcap           0/236  *** ALL LOST ***   tcpdump -i any
+  fleet_sll2.pcap          0/236  *** ALL LOST ***
+  fleet_raw.pcap           0/236  *** ALL LOST ***   VPN / tunnel
+  fleet_loopback.pcap      0/236  *** ALL LOST ***   macOS -i lo0
+  fleet_ipv6.pcap          0/236  *** ALL LOST ***
+```
+
+**`tcpdump -i any` is the most common capture command there is**, and its output produced an empty
+report that read as a healthy estate scoring A+. Not a crash — a confident wrong answer. This was the
+right thing to fix first.
+
+All seven now produce **13 sessions, 30 findings, grade D**, identical to the Ethernet baseline. That
+is the test: the payloads are byte-identical across the files, so any difference is a link-layer bug and
+nothing else.
+
+### Two bugs found by running it
+
+**Decoding more link types was not enough.** With 802.11 (link type 105, still unsupported and always
+will be something), the capture yielded no sessions, no findings, and therefore **A+ / 100**. Exactly
+the ADR-0014 failure, one layer down. Added `ANALYSIS-CAPTURE-NOT-READABLE` at HIGH severity and a
+forced `Grade.INCOMPLETE` with score 0. *Something will always be unsupported, so the honest answer had
+to be structural rather than a longer list of link types.*
+
+**Then the coverage check cried wolf.** The first version counted IP-bearing frames as "decoded", so a
+capture containing only ARP — perfectly readable, just not mail — was flagged unreadable. Caught by
+`test_a_readable_capture_with_no_mail_is_not_flagged`, written specifically to check for that.
+`decoded_frame_count` now means *frames whose link layer parsed*, non-IP included. A tool that invents
+a problem is exactly what USP-01 exists to argue against, so finding one inside our own coverage check
+was worth the test.
+
+**The contract test earned its keep again.** Adding two `Capture` fields without regenerating
+`schema/generated/` failed `test_generated_json_schema_is_current` immediately — the documented rule
+working as intended.
+
+**Next:** real-world PCAPs are now the top corpus risk; link-layer variance is no longer part of it.
+Then the LLM layer (O02 + USP-04), USP-11 DANE/MTA-STS, and the deck.

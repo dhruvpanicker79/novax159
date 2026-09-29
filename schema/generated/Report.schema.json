@@ -113,6 +113,12 @@
         "link_type": {
           "type": "string"
         },
+        "decoded_frame_count": {
+          "type": "integer"
+        },
+        "link_layer_note": {
+          "type": "string"
+        },
         "analysed_at": {
           "anyOf": [
             {

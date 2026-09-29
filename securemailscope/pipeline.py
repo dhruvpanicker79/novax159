@@ -28,11 +28,14 @@ from pathlib import Path
 
 from schema import (
     CategoryScore,
+    Evidence,
+    Finding,
     FindingCategory,
     FleetPosture,
     Grade,
     HostPosture,
     MailSession,
+    Remediation,
     Report,
     Severity,
     TlsMode,
@@ -49,6 +52,58 @@ from .ml.classifier import RiskModel
 from . import tls
 from .proto import detect, starttls
 from .rules import pack
+
+
+def _coverage_finding(capture, sessions) -> Finding | None:
+    """Flag a capture we could not read, rather than reporting it as clean.
+
+    Three distinct situations, and only the first two are our problem:
+
+    * **link layer not supported** — we decoded nothing at all. The capture may
+      be full of mail and we cannot see it.
+    * **decoded, but almost nothing came through** — a truncated file, or a
+      link type we half-understand.
+    * **decoded fine, no mail** — a perfectly good capture of something else.
+      That is not a finding, it is an answer.
+    """
+    decoded = capture.decoded_frame_count
+    frames = capture.packet_count or 0
+    if not frames:
+        return None
+
+    unsupported = capture.link_type.startswith("unsupported")
+    blind = decoded == 0
+    thin = 0 < decoded < frames * 0.2
+
+    if not (unsupported or blind or thin):
+        return None
+
+    detail = (f"Link type {capture.link_type}: {decoded} of {frames} frames could "
+              f"be decoded. {capture.link_layer_note}")
+    return Finding(
+        rule_id="ANALYSIS-CAPTURE-NOT-READABLE",
+        title="Capture could not be read",
+        category=FindingCategory.CONFIGURATION,
+        base_severity=Severity.HIGH if blind or unsupported else Severity.MEDIUM,
+        severity=Severity.HIGH if blind or unsupported else Severity.MEDIUM,
+        description=(
+            "The capture's link layer could not be decoded, so no mail sessions "
+            "could be reconstructed from it. **This is not a clean result** - it "
+            "is an absence of evidence, and nothing in this report should be read "
+            "as a statement about the security of the hosts in this file. "
+            + detail),
+        affected_host=capture.filename,
+        affected_port=0,
+        evidence=Evidence(capture_sha256=capture.sha256, stream_id=-1,
+                          note="capture-level coverage check"),
+        remediation=Remediation(
+            summary=("Re-capture with a supported link layer, or convert the file: "
+                     "`tcpdump -r in.pcap -w out.pcap` on a host whose libpcap "
+                     "writes Ethernet or raw IP. Supported: Ethernet (including "
+                     "802.1Q and QinQ), Linux cooked capture v1 and v2, raw IPv4 "
+                     "and IPv6, and BSD loopback."),
+            effort="trivial", risk_of_change="None - this is a capture problem."),
+    )
 
 
 def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
@@ -74,6 +129,12 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
         tls.attach(session, flow)         # S4
         certs_stage.attach(session, flow, trust_store)   # S5
         sessions.append(session)
+
+    # -- coverage: an unreadable capture must never read as a clean one -----
+    # If the link layer could not be decoded there are no sessions, and a
+    # report with no sessions and no findings is indistinguishable from a
+    # healthy estate. Say so instead. Same rule as ADR-0014, one layer down.
+    coverage = _coverage_finding(capture, sessions)
 
     # -- S7, then the fleet baseline the anomaly layer needs ---------------
     for session in sessions:
@@ -126,6 +187,9 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
         session.assessment.anomaly_score = result.score
         session.assessment.is_anomalous = result.is_anomalous
         session.assessment.anomaly_reasons = result.reasons
+
+    if coverage is not None:
+        all_findings.append(coverage)
 
     ordered, _ = priority_stage.prioritise(all_findings, sessions)
 
@@ -248,8 +312,20 @@ def _roll_up_fleet(sessions: list[MailSession], hosts: list[HostPosture],
         summary += (f" Coverage is partial: {unparsed} encrypted {noun} could not be "
                     f"inspected, so {pronoun} what was observable, not a clean result.")
 
+    # A capture we could not read must not grade. Scoring 100/100 because no
+    # findings could be produced is the exact failure ADR-0014 exists to stop,
+    # one layer further down: absence of evidence is not evidence of absence.
+    unreadable = any(f.rule_id == "ANALYSIS-CAPTURE-NOT-READABLE" for f in findings)
+    if unreadable:
+        grade, score = Grade.INCOMPLETE, 0.0
+        summary = ("This capture could not be read, so no posture was assessed. "
+                   "The grade is '?' rather than a score: nothing here is a "
+                   "statement about these hosts, only about the file.")
+    else:
+        grade = _grade(score)
+
     return FleetPosture(
-        score=score, grade=_grade(score),
+        score=score, grade=grade,
         host_count=len(hosts), session_count=len(sessions),
         category_scores=category_scores,
         forward_secrecy_ratio=round(len(pfs) / len(encrypted), 2) if encrypted else 0.0,

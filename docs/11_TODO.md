@@ -99,9 +99,10 @@ Build order matters — each item depends on the one above.
 
 ## D. Robustness — insurance against the worst demo moment
 
-- [ ] **Link-layer coverage.** Currently **IPv4 over Ethernet only**. A judge's capture could be IPv6, VLAN-tagged
-      (802.1Q) or Linux cooked capture (SLL), and we would report "no mail sessions found". This is the most
-      likely cause of an on-stage failure.
+- [x] **Link-layer coverage.** **Done (ADR-0027).** Ethernet + 802.1Q/QinQ, Linux cooked v1/v2, raw IPv4/IPv6,
+      BSD loopback, IPv6 extension headers. Five of seven encapsulations previously lost *every frame* and
+      reported a clean A+ — including `tcpdump -i any`, the most common capture command there is. All seven now
+      give identical results, and an undecodable capture grades `?` rather than A+.
 - [ ] **Malformed-input harness.** Truncated, empty and random-byte files through the pipeline; assert no crash.
       Then the claim is "N malformed inputs, 0 crashes".
 - [ ] **Real-world PCAPs.** Everything in the corpus is synthetic *and* self-authored. Even five public captures

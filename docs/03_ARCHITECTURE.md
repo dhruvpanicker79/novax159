@@ -97,7 +97,7 @@ They are not runtime dependencies.
 
 ```
 securemailscope/
-  capture/      S0, S1   pcap ingest, TCP reassembly
+  capture/      S0, S1   pcap ingest, link-layer decode, TCP reassembly
   proto/        S2, S3   protocol ID, STARTTLS state machine, credential detection
   tls/          S4       record + handshake parser, JA3/JA3S, PQ group detection
   certs/        S5       X.509 extraction, chain assembly, validation
@@ -114,6 +114,18 @@ fixtures/                generated sample report + per-session files for paralle
 web/                     generated TypeScript types only - the console is server-rendered
 docs/                    this documentation
 ```
+
+### Link layers (ADR-0027)
+
+`capture/linklayer.py` decodes Ethernet (including 802.1Q and QinQ), Linux cooked capture v1 and v2,
+raw IPv4 and IPv6, and BSD loopback, and walks the IPv6 extension-header chain. `Capture` carries
+`link_type`, `decoded_frame_count` and `link_layer_note` so coverage is **in the report**, not in a log
+line: a capture whose link layer we cannot read yields no sessions, and without those fields that is
+indistinguishable from a healthy estate. When the decode rate collapses the pipeline emits
+`ANALYSIS-CAPTURE-NOT-READABLE` and forces `Grade.INCOMPLETE`.
+
+`decoded_frame_count` counts frames whose **link layer** parsed, ARP and other non-IP traffic included.
+Counting only IP-bearing frames reports an ARP-only capture as unreadable, which it is not.
 
 ## 5. Ownership and the parallelisation rule
 

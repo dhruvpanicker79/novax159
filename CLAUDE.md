@@ -22,8 +22,8 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 | | |
 |---|---|
 | Python | ~15,800 lines, plus ~2,200 of console CSS/JS/HTML |
-| Tests | **201, all passing** |
-| Docs | ~50,000 words across 12 documents, **27 ADRs** |
+| Tests | **211, all passing** |
+| Docs | ~51,000 words across 12 documents, **28 ADRs** |
 | Deliverables | **26 met, 6 partial, 2 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
 | Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else |
@@ -31,12 +31,13 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 ```bash
 pip install dpkt flask
 python testbed/certgen.py && python testbed/synth.py     # build the corpus
+python testbed/relink.py                                 # + 7 link-layer variants
 python scripts/analyse.py testbed/out/fleet.pcap --out out/ --trust testbed/certs/_ca.der
 python -m securemailscope.api                            # the Kavach console, port 8000
                                                          # analyst/analyst123 · admin/admin123
 python scripts/audit.py                                  # verify every deliverable
 python scripts/evaluate.py                               # measure accuracy; non-zero exit on disagreement
-for t in contract ml parsing tls certs report platform; do python tests/test_$t.py; done
+for t in contract ml parsing tls certs report platform linklayer; do python tests/test_$t.py; done
 ```
 
 **Eight commits are unpushed.** Git cannot push from this machine — see §5.
@@ -51,7 +52,7 @@ for t in contract ml parsing tls certs report platform; do python tests/test_$t.
 | `docs/01_PROBLEM_STATEMENT.md` | PS decomposed into 21 deliverables (D01–D21) + O01/O02, traceability matrix |
 | `docs/02_USP.md` | The 11 USPs, with judge Q&A and slide mapping. **The PPT reference** |
 | `docs/03_ARCHITECTURE.md` | Pipeline, data model, module ownership |
-| `docs/04_DECISIONS.md` | **27 ADRs.** Every non-obvious decision, with what was rejected |
+| `docs/04_DECISIONS.md` | **28 ADRs.** Every non-obvious decision, with what was rejected |
 | `docs/05_WORKLOG.md` | Session-by-session record, including every bug found |
 | `docs/06_STATUS.md` | Verified deliverable status (`06_STATUS_GENERATED.txt` is the raw audit output) |
 | `docs/07_RELATED_WORK.md` | Seven papers reviewed; what to adopt from each |
@@ -78,7 +79,7 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 |---|---|---|
 | `schema/` | — | **The contract. Zero dependencies** (ADR-0009). Generates JSON Schema + TypeScript |
 | `schema/platform.py` | — | Jobs, dispositions, audit events, posture snapshots (ADR-0022) |
-| `securemailscope/capture/` | S0–S1 | Own TCP reassembler with byte→frame provenance |
+| `securemailscope/capture/` | S0–S1 | Link-layer decode (ADR-0027) + own TCP reassembler with byte→frame provenance |
 | `securemailscope/proto/` | S2–S3 | Banner-led protocol ID; ten STARTTLS checks; credential recovery |
 | `securemailscope/tls/` | S4 | Own record + handshake parser, JA3/JA3S, PQ groups |
 | `securemailscope/certs/` | S5 | **Own DER/X.509 parser + real RSA signature verification** |
@@ -154,9 +155,11 @@ example, so triage work becomes supervised signal rather than evaporating.
 3. **USP-09 attack feasibility matrix** — `Finding.related_attacks` exists; needs feasibility verdicts and a panel.
 4. **USP-11 DANE / MTA-STS** — the highest-value unbuilt feature, see §7.
 5. **USP-10 temporal drift** — now cheap: `PostureSnapshot` already archives every run, so two snapshots are a diff.
-6. **Link-layer coverage.** IPv4-over-Ethernet only. A judge's capture could be IPv6, VLAN-tagged or Linux
-   cooked capture and we would report "no mail sessions". **Most likely cause of an on-stage failure.**
-7. **Real-world PCAPs.** Every capture measured so far is synthetic and self-authored.
+6. ~~**Link-layer coverage.**~~ **Done (ADR-0027).** Ethernet + 802.1Q/QinQ, Linux cooked v1/v2, raw
+   IPv4/IPv6, BSD loopback, and the IPv6 extension-header chain. Five of seven encapsulations previously
+   lost *every frame* and reported a clean A+. An undecodable capture now grades `?`, never A+.
+7. **Real-world PCAPs.** Every capture measured so far is synthetic and self-authored. **Now the most
+   likely cause of an on-stage surprise**, though link-layer variance is no longer part of it.
 8. **PDF export** needs Playwright (blocked); browser print works and the print stylesheet is applied.
 9. **The offline HTML report has never been looked at by a human.** The console has been driven end to
    end in a browser (ADR-0025, ADR-0026); the report is a separate renderer and has not been.

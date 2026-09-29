@@ -80,6 +80,12 @@ class Capture(JsonModel):
     first_packet_at: datetime | None = None
     last_packet_at: datetime | None = None
     link_type: str = "ethernet"
+    #: Frames whose **link layer** we could parse — including ARP and other
+    #: non-IP traffic, which is readable but simply is not mail. A capture whose
+    #: link layer we cannot decode yields no sessions, which is indistinguishable
+    #: from a healthy estate unless we say so — same rule as ADR-0014.
+    decoded_frame_count: int = 0
+    link_layer_note: str = ""
     analysed_at: datetime | None = None
     tool_version: str = SCHEMA_VERSION
 
