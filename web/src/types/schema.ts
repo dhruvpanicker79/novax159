@@ -2,6 +2,7 @@
 // Regenerate with:  python -m schema.jsonschema
 // Source of truth:  schema/models.py
 
+export type AttackVerdict = "feasible" | "not_applicable" | "not_observable";
 export type ChainStatus = "valid" | "self_signed" | "incomplete" | "unknown_issuer" | "expired" | "not_yet_valid" | "name_mismatch" | "wrong_order" | "opaque_tls13" | "absent";
 export type Confidence = "low" | "medium" | "high" | "confirmed";
 export type FindingCategory = "protocol" | "cipher" | "key_exchange" | "certificate" | "certificate_strength" | "configuration" | "starttls" | "attack_evidence" | "post_quantum" | "compliance";
@@ -30,6 +31,22 @@ export interface ActionItem {
   platform: string;
   config: string;
   standards: string[];
+}
+
+/** One named attack, judged against what this capture actually showed. */
+export interface AttackAssessment {
+  attack_id: string;
+  name: string;
+  reference: string;
+  year: number;
+  verdict: AttackVerdict;
+  severity: Severity;
+  precondition: string;
+  rationale: string;
+  affected: string[];
+  sessions_evaluated: number;
+  sessions_matching: number;
+  related_rules: string[];
 }
 
 /** Signals that an attack has ALREADY happened, not merely that it could. */
@@ -373,6 +390,7 @@ export interface Report {
   prioritised_findings: Finding[];
   executive_summary: string;
   narrative: Narrative | null;
+  attack_matrix: AttackAssessment[];
   generated_at: string | null;
   evaluation_metrics: Record<string, number>;
 }

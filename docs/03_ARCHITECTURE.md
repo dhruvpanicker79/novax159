@@ -157,6 +157,16 @@ confident lie. Per-host drift is carried separately from fleet drift because the
 exactly the event this feature exists to catch — on the corpus it moves −0.3 while two hosts move ~100
 points in opposite directions.
 
+### Attack feasibility (ADR-0030)
+
+`attacks.py` judges sixteen named attacks against the report and writes `Report.attack_matrix`. Each has
+a stated precondition and a predicate returning `True` / `False` / `None`; `None` (cannot judge) is
+distinct from `False` (checked, not possible), and every predicate returns `None` for a session with no
+parsed handshake. The fleet verdict is FEASIBLE / NOT APPLICABLE / NOT OBSERVABLE accordingly.
+
+Heartbleed is present specifically to always read NOT OBSERVABLE — its precondition includes the
+server's OpenSSL build, which a passive capture never shows.
+
 ## 5. Ownership and the parallelisation rule
 
 | Person | Stages |

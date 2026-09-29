@@ -206,6 +206,11 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
         generated_at=datetime.now(tz=timezone.utc),
     )
 
+    # USP-09: named attacks with a verdict, including the ones ruled out. Runs
+    # before the narrative so the summary could quote it later if wanted.
+    from .attacks import assess
+    report.attack_matrix = assess(report)
+
     # S8 layer 3 (O02, USP-04). Deterministic by default: no network, no model,
     # no API key. It writes *about* the rule engine's output and is structurally
     # unable to change it - it is handed the finished report, and only the

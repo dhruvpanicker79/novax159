@@ -22,6 +22,7 @@ from datetime import datetime
 
 from .base import Evidence, JsonModel
 from .enums import (
+    AttackVerdict,
     ChainStatus,
     Confidence,
     FindingCategory,
@@ -695,6 +696,31 @@ class FleetPosture(JsonModel):
 
 
 @dataclass
+class AttackAssessment(JsonModel):
+    """One named attack, judged against what this capture actually showed.
+
+    USP-09. The value is as much in the entries that read NOT APPLICABLE as in
+    the ones that read FEASIBLE: a tool that lists only what is broken cannot
+    be distinguished from a tool that did not look. Every row states its
+    precondition and what was observed, so a reader can check the reasoning
+    rather than take the verdict.
+    """
+
+    attack_id: str = ""
+    name: str = ""
+    reference: str = ""          #: CVE, or the RFC that deprecates the primitive
+    year: int = 0
+    verdict: AttackVerdict = AttackVerdict.NOT_OBSERVABLE
+    severity: Severity = Severity.INFO
+    precondition: str = ""       #: what has to be true for it to work
+    rationale: str = ""          #: why this verdict, quoting what was seen
+    affected: list[str] = field(default_factory=list)      #: "host:port"
+    sessions_evaluated: int = 0
+    sessions_matching: int = 0
+    related_rules: list[str] = field(default_factory=list)
+
+
+@dataclass
 class HostDrift(JsonModel):
     """How one host's posture moved between two captures. USP-10."""
 
@@ -814,6 +840,8 @@ class Report(JsonModel):
     executive_summary: str = ""
     #: O02 / USP-04 layer 3 - the written remediation plan.
     narrative: Narrative | None = None
+    #: USP-09 - named attacks with a verdict, including the ones ruled out.
+    attack_matrix: list[AttackAssessment] = field(default_factory=list)
     generated_at: datetime | None = None
     #: USP-07: accuracy numbers from the ground-truth testbed, when available.
     evaluation_metrics: dict[str, float] = field(default_factory=dict)

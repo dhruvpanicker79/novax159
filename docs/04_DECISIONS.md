@@ -922,3 +922,58 @@ would be "grade fell" with no cause — the half of the sentence that matters). 
 refusing on low overlap (a warning above a filled-in chart is read as a chart). Matching hosts
 fuzzily by subnet (guessing which machines are "the same" is exactly the kind of inference this tool
 does not make).
+
+---
+
+## ADR-0030 — The attack matrix is worth more for what it rules out
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Context.** USP-09 promised named attacks with feasibility verdicts. `Finding.related_attacks` already
+carried the names — *BEAST*, *Lucky13*, *Sweet32* — but a name attached to a finding is a label, not a
+verdict. "RC4 was negotiated (see: RC4 biases)" tells an administrator nothing they did not know.
+
+**Decision.** `securemailscope/attacks.py` holds sixteen named attacks, each with a stated precondition
+and a predicate evaluated against every session. The fleet verdict is FEASIBLE if any session meets the
+precondition, NOT APPLICABLE if sessions were checked and none did, NOT OBSERVABLE if nothing could be
+judged.
+
+**The NOT APPLICABLE rows are the deliverable.** A report listing only what is broken is
+indistinguishable from a report by a tool that never looked. *"POODLE: not applicable — checked 9 of 13
+sessions, none negotiated SSL 3.0"* is a claim with a method behind it, and a judge can test it by
+handing us a capture that does contain SSLv3. The audit enforces this: USP-09 is only MET when the
+matrix contains **both** feasible and ruled-out entries, because a matrix that only ever says "feasible"
+has not demonstrated that it checked anything.
+
+**Three verdicts, not two.** `NOT_OBSERVABLE` exists because TLS 1.3 encrypts the certificate, an
+unparsed handshake hides everything, and the corpus contains sessions with no TLS at all. Every
+predicate is wrapped so that a session without a parsed handshake returns `None` rather than `False` —
+answering "not vulnerable" about a session we could not read is the exact class of bug this project
+keeps catching. `test_a_capture_with_no_handshakes_judges_nothing_rather_than_clearing_it` pins it.
+
+**Heartbleed is in the registry specifically to always read NOT OBSERVABLE.** CVE-2014-0160 needs the
+heartbeat extension *and* a vulnerable OpenSSL build on the server, and a passive observer sees neither
+the server's version nor, necessarily, any heartbeat message. Including it and refusing to rule it out
+is a stronger statement than omitting it.
+
+**Two bugs found by reading the generated table rather than the code.**
+
+*POODLE reported FEASIBLE against TLS 1.2.* The predicate was `tls_version_num <= 3.0`, and on that
+scale TLS 1.0 is `1.00` — so it matched every session in the corpus. A false positive on the most
+recognisable CVE in the table, and precisely the sort of thing that gets found on stage. Version
+comparisons now go through the `TlsVersion` enum, where `SSL3` cannot be confused with `1.2`.
+
+*Heartbleed reported NOT APPLICABLE.* The predicate returned `False` when the ClientHello did not offer
+the heartbeat extension — which only says this *client* did not ask for it. Clearing a server of
+Heartbleed on that basis is false reassurance of exactly the kind the rest of the tool refuses to give.
+
+Both were visible the moment the table was printed, and invisible while reading the predicates.
+
+**Consequence.** **USP-09 goes PARTIAL → MET**; the audit reads **29 met / 4 partial / 1 not built**.
+On the corpus: 9 feasible, 6 ruled out, 1 not observable. 16 new tests, 263 total. `scripts/evaluate.py`
+unchanged at precision 1.00 / recall 1.00 — the matrix reads the analysis and does not alter it.
+
+**Rejected.** Scoring attacks by CVSS (a number about the CVE in general, not about this estate; the
+useful severity is what it costs *here*, which the port role already decides). Attempting exploitation
+to confirm feasibility (the entire project is passive). Listing only feasible attacks — which would have
+halved the work and removed the reason it is interesting.

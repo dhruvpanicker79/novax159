@@ -10,6 +10,7 @@ Full model documentation: docs/03_ARCHITECTURE.md
 
 from .base import Evidence, JsonModel, from_dict, to_dict
 from .enums import (
+    AttackVerdict,
     ChainStatus,
     Confidence,
     FindingCategory,
@@ -43,6 +44,7 @@ from .models import (
     MailSession,
     Phase,
     ActionItem,
+    AttackAssessment,
     HostDrift,
     Narrative,
     PostureDrift,
@@ -95,6 +97,8 @@ __all__ = [
     "MailSession",
     "Phase",
     "ActionItem",
+    "AttackAssessment",
+    "AttackVerdict",
     "HostDrift",
     "Narrative",
     "PostureDrift",

@@ -57,6 +57,12 @@
         }
       ]
     },
+    "attack_matrix": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AttackAssessment"
+      }
+    },
     "generated_at": {
       "anyOf": [
         {
@@ -2007,6 +2013,64 @@
           }
         }
       }
+    },
+    "AttackAssessment": {
+      "type": "object",
+      "title": "AttackAssessment",
+      "description": "One named attack, judged against what this capture actually showed.",
+      "properties": {
+        "attack_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer"
+        },
+        "verdict": {
+          "$ref": "#/$defs/AttackVerdict"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "precondition": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "affected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sessions_evaluated": {
+          "type": "integer"
+        },
+        "sessions_matching": {
+          "type": "integer"
+        },
+        "related_rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "AttackVerdict": {
+      "type": "string",
+      "enum": [
+        "feasible",
+        "not_applicable",
+        "not_observable"
+      ],
+      "description": "Whether a named attack works against what we observed. USP-09."
     }
   }
 }

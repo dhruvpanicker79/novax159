@@ -395,10 +395,20 @@ def usps(report: Report) -> list[Check]:
 
     # USP-09
     attacks = {a for f in findings for a in f.related_attacks}
+    # The matrix is on the report, so read it rather than assert a module exists.
+    matrix = report.attack_matrix
+    verdicts = {}
+    for entry in matrix:
+        verdicts[entry.verdict.value] = verdicts.get(entry.verdict.value, 0) + 1
+    ruled_out = verdicts.get("not_applicable", 0)
     add("USP-09", "Attack feasibility matrix",
-        PARTIAL if attacks else MISSING,
-        f"{len(attacks)} named attacks attached to findings ({sorted(attacks)[:4]}...), "
-        f"but no feasibility verdict column and no dedicated panel")
+        # Ruling attacks out is half the deliverable: a matrix that only ever
+        # says "feasible" has not demonstrated that it checked anything.
+        MET if (matrix and ruled_out and verdicts.get("feasible")) else
+        (PARTIAL if matrix else MISSING),
+        f"{len(matrix)} named attacks judged: {verdicts.get('feasible', 0)} feasible, "
+        f"{ruled_out} ruled out, {verdicts.get('not_observable', 0)} not observable "
+        f"passively. {len(attacks)} attack names also attached to individual findings")
 
     # Run the diff rather than assert it exists — the same lesson as O02.
     drift_verdict, drift_note = MISSING, "not built"

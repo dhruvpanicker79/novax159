@@ -850,3 +850,53 @@ would change `fleet.pcap` and invalidate the hand-authored ground truth in `mani
 **Next:** USP-11 (DANE / MTA-STS) is the last unbuilt item, and `docs/02_USP.md` already settles the
 design question — *"if the capture contains DNS traffic"* — so it is passive extraction, not a live
 lookup. That needs DNS added to the synthetic corpus first. D16/D17/USP-04 still wait on the Colab run.
+
+---
+
+## Session 11 — 2026-09-29 · attack feasibility matrix (USP-09)
+
+**What shipped.** `securemailscope/attacks.py` — sixteen named attacks, each judged against the capture,
+plus an Attack Matrix view. **USP-09 goes PARTIAL → MET.** The audit reads **29 met / 4 partial / 1 not
+built**. ADR-0030. 263 tests pass; `scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00.
+
+**Files.** `securemailscope/attacks.py` (new), `tests/test_attacks.py` (new, 16 tests),
+`schema/enums.py` (`AttackVerdict`), `schema/models.py` (`AttackAssessment`, `Report.attack_matrix`) +
+regenerated contract, `pipeline.py`, `scripts/audit.py`, `api/static/app.js`, `api/templates/app.html`.
+
+### On the corpus
+
+```
+  9 FEASIBLE        credential interception, STARTTLS stripping, server impersonation,
+                    RC4 biases, ROBOT, Lucky13, renegotiation injection,
+                    retrospective decryption, harvest-now-decrypt-later
+  6 NOT APPLICABLE  POODLE, BEAST, CRIME, FREAK, Logjam, Sweet32
+  1 NOT OBSERVABLE  Heartbleed
+```
+
+**The ruled-out rows are the deliverable**, not padding. A report listing only what is broken is
+indistinguishable from one by a tool that never looked; *"POODLE: not applicable, checked 9 of 13
+sessions, none negotiated SSL 3.0"* is a claim a judge can falsify by handing us an SSLv3 capture. The
+audit enforces it — USP-09 is MET only when the matrix contains both feasible **and** ruled-out entries.
+
+Heartbleed is in the registry specifically so that it always reads NOT OBSERVABLE: CVE-2014-0160 needs
+the server's OpenSSL build, which a passive observer never sees. Including it and refusing to clear it
+says more than omitting it would.
+
+### Two bugs, both found by printing the table rather than reading the code
+
+**POODLE reported FEASIBLE against TLS 1.2.** The predicate was `tls_version_num <= 3.0`, and TLS 1.0
+is `1.00` on that scale — so it matched every session in the corpus. A false positive on the most
+recognisable CVE in the table, and exactly what a judge would notice. Version comparisons now use the
+`TlsVersion` enum, where `SSL3` cannot be confused with `1.2`.
+
+**Heartbleed reported NOT APPLICABLE.** The predicate returned `False` when the ClientHello did not
+offer the heartbeat extension — which only says the *client* did not ask. Clearing a server on that
+basis is false reassurance of the kind the rest of the tool refuses to give.
+
+Neither was visible while reading the predicates. Both were obvious the moment the generated table was
+on screen. **Worth generalising: for anything that produces a table of verdicts, print it and read it —
+the code looks correct in both of these cases.**
+
+**Next:** USP-11 (passive DANE / MTA-STS) is the last unbuilt item. `docs/02_USP.md` settles the design
+— *"if the capture contains DNS traffic"* — so it is passive extraction, and the synthetic corpus needs
+DNS added first. D16/D17/USP-04 still wait on the Colab run.

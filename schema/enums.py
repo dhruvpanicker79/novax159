@@ -255,3 +255,24 @@ class Persona(str, Enum):
     FORENSICS = "forensics"
     INCIDENT_RESPONSE = "incident_response"
     ADMINISTRATOR = "administrator"
+
+
+class AttackVerdict(str, Enum):
+    """Whether a named attack works against what we observed. USP-09.
+
+    Three states, not two. `NOT_OBSERVABLE` is the one that matters: TLS 1.3
+    hides the certificate, an unparsed handshake hides everything, and a
+    capture that never showed a heartbeat cannot rule out Heartbleed. Folding
+    that into `NOT_APPLICABLE` would claim safety we did not establish - the
+    same rule as ADR-0014.
+    """
+
+    FEASIBLE = "feasible"
+    NOT_APPLICABLE = "not_applicable"
+    NOT_OBSERVABLE = "not_observable"
+
+    @property
+    def label(self) -> str:
+        return {"feasible": "FEASIBLE",
+                "not_applicable": "NOT APPLICABLE",
+                "not_observable": "NOT OBSERVABLE"}[self.value]

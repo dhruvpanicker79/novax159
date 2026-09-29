@@ -54,7 +54,7 @@ The last partial is D20's PDF, which needs Playwright and is already covered by 
       consumes structured findings and emits narrative and config text only. It may **never** introduce, remove or
       re-score a finding. Deterministic template fallback so a demo cannot die on an API timeout.
 
-- [ ] **Attack feasibility matrix** → closes **USP-09**.
+- [x] **Attack feasibility matrix** — **done (ADR-0030).** 16 attacks, 3 verdicts. 9 feasible / 6 ruled out / 1 not observable on the corpus.
       `Finding.related_attacks` already exists. Needs a feasibility verdict per attack (*Sweet32 — feasible:
       3DES with long-lived sessions*; *POODLE — not applicable*) and a panel in the report.
 

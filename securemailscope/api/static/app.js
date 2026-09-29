@@ -290,6 +290,8 @@ function paintChrome() {
   set('#b-certs', certCount());
   set('#b-hosts', byHost().length);
   set('#b-plan', S.report?.narrative?.action_plan?.length || 0);
+  const feas = (S.report?.attack_matrix || []).filter(a => a.verdict === 'feasible');
+  set('#b-attacks', feas.length, feas.some(a => a.severity === 'critical'));
 
   const running = S.jobs.some(j => ['queued', 'validating', 'running'].includes(j.state));
   $('#sysstate').textContent = running ? 'Analysing…' : 'System Ready';
@@ -1154,6 +1156,91 @@ window.toggleAction = n => {
 /* The narrative uses **bold** sparingly; nothing else is interpreted. */
 const md = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 
+/* ─────────────── attack feasibility matrix (USP-09) ─────────────── */
+const VERDICT = {
+  feasible:       { label: 'FEASIBLE',       pill: 'sev-critical', mark: '!' },
+  not_observable: { label: 'NOT OBSERVABLE', pill: 'sev-medium',   mark: '?' },
+  not_applicable: { label: 'NOT APPLICABLE', pill: 'sev-low',      mark: '✓' },
+};
+
+V.attacks = () => {
+  const matrix = S.report?.attack_matrix || [];
+  if (!matrix.length) return blank('No matrix yet', 'Analyse a capture first.');
+
+  const count = v => matrix.filter(a => a.verdict === v).length;
+  const feasible = matrix.filter(a => a.verdict === 'feasible');
+
+  return `
+  <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+    ${kpi('Attacks tracked', matrix.length, [], COLOR.info,
+          { note: 'each judged against this capture' })}
+    ${kpi('Feasible', count('feasible'), [], COLOR.critical,
+          { invert: true, note: 'preconditions met by at least one session' })}
+    ${kpi('Ruled out', count('not_applicable'), [], COLOR.ok,
+          { note: 'checked and not possible here' })}
+    ${kpi('Not observable', count('not_observable'), [], COLOR.medium,
+          { invert: true, note: 'cannot be judged passively' })}
+  </div>
+
+  <p class="note"><b>The rows that read NOT APPLICABLE are the point.</b> A report listing only what
+  is broken cannot be told apart from a report by a tool that did not look. Every row states its
+  precondition and what was actually observed, so the reasoning is checkable rather than the verdict
+  being taken on trust — and anything that cannot be established from a passive capture says so
+  instead of being quietly cleared.</p>
+
+  <div class="panel flush">
+    ${head('Attack Feasibility Matrix', 'target',
+           `<span class="faint">${matrix.length} attacks · ${S.report.sessions.length} sessions</span>`)}
+    <table><thead><tr>
+      <th style="width:130px">Verdict</th><th>Attack</th><th>Reference</th>
+      <th>Severity</th><th>Affects</th>
+    </tr></thead><tbody>
+    ${matrix.map((a, i) => {
+      const v = VERDICT[a.verdict] || VERDICT.not_observable;
+      return `<tr class="clickable" onclick="toggleAttack(${i})">
+        <td><span class="sev ${v.pill}">${v.label}</span></td>
+        <td><b style="font-weight:500">${esc(a.name)}</b>
+          <div class="faint" style="font-size:11px;margin-top:2px">${esc(a.precondition)}</div></td>
+        <td class="mono dim" style="font-size:11px">${esc(a.reference)}${
+          a.year ? ` <span class="faint">${a.year}</span>` : ''}</td>
+        <td><span class="sev sev-${a.severity}">${a.severity}</span></td>
+        <td class="mono dim" style="font-size:11px">${
+          a.affected.length
+            ? esc(a.affected.slice(0, 2).join(', ')) +
+              (a.affected.length > 2 ? ` +${a.affected.length - 2}` : '')
+            : '<span class="faint">none</span>'}</td>
+      </tr>
+      <tr id="atk-${i}" hidden><td colspan="5" style="background:var(--sunken)">
+        <div style="font-size:12.5px;line-height:1.7">${esc(a.rationale)}</div>
+        <dl class="kv" style="margin-top:11px">
+          <dt>Precondition</dt><dd style="font-family:var(--sans)">${esc(a.precondition)}</dd>
+          <dt>Sessions judged</dt><dd>${a.sessions_evaluated} of ${S.report.sessions.length}</dd>
+          ${a.affected.length ? `<dt>Affected</dt><dd>${esc(a.affected.join(', '))}</dd>` : ''}
+          ${a.related_rules.length
+            ? `<dt>Related rules</dt><dd>${esc(a.related_rules.join(', '))}</dd>` : ''}
+        </dl>
+      </td></tr>`;
+    }).join('')}
+    </tbody></table>
+  </div>
+
+  ${feasible.length ? `<div class="panel" style="margin-top:14px">
+    ${head('What an attacker could do today', 'alert')}
+    <p class="dim" style="font-size:13px;line-height:1.7;margin:0">
+      ${feasible.slice(0, 4).map(a => esc(a.name)).join(', ')}${
+        feasible.length > 4 ? ` and ${feasible.length - 4} more` : ''} are feasible against this
+      estate as captured. The remediation plan closes them in severity order.</p>
+    <div style="margin-top:13px">
+      <button class="btn accent" onclick="location.hash='#plan'">Go to the remediation plan</button>
+    </div>
+  </div>` : ''}`;
+};
+
+window.toggleAttack = i => {
+  const row = $(`#atk-${i}`);
+  if (row) row.hidden = !row.hidden;
+};
+
 /* ─────────────── temporal drift (USP-10) ─────────────── */
 V.drift = () => {
   if (S.snapshots.length < 2) {
@@ -1600,6 +1687,7 @@ const TITLES = {
   findings: ['Findings', 'Prioritised weaknesses with analyst dispositions'],
   plan: ['Remediation Plan', 'What to actually do, in the order to do it'],
   drift: ['Posture Drift', 'What changed between two captures of the same estate'],
+  attacks: ['Attack Feasibility', 'Named attacks judged against this capture — including the ones ruled out'],
   session: ['Session Details', 'Full analysis of the selected session'],
   exposure: ['Exposure Map', 'Observed topology of the mail estate'],
   certificates: ['Certificates', 'X.509 chains observed on the wire'],
