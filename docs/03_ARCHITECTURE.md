@@ -167,6 +167,23 @@ parsed handshake. The fleet verdict is FEASIBLE / NOT APPLICABLE / NOT OBSERVABL
 Heartbleed is present specifically to always read NOT OBSERVABLE — its precondition includes the
 server's OpenSSL build, which a passive capture never shows.
 
+### Training, locally (ADR-0031)
+
+`ml/gbt.py` is histogram gradient-boosted regression trees and `ml/iforest.py` an isolation forest, both
+pure stdlib, because scikit-learn cannot run here. `scripts/train_local.py` trains both in about eleven
+seconds and writes JSON — joblib and pickle both want numpy.
+
+Two boundaries that matter:
+
+* **`archetype` is excluded from training.** It is the corpus generator's latent variable and does not
+  exist at inference time; training on it is label leakage.
+* **The posture grade is rule-derived, the risk score is not.** The grade (D19) comes from findings,
+  each carrying an RFC citation and frame numbers. The model scores risk for triage (D16) and ordering
+  (D18). A model that could move a grade with no finding behind it would make the headline number the
+  one unverifiable thing in the report.
+
+Contributions are exact path decomposition, and `bias + sum(contributions) == prediction` is asserted.
+
 ## 5. Ownership and the parallelisation rule
 
 | Person | Stages |

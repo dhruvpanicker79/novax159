@@ -22,22 +22,24 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 | | |
 |---|---|
 | Python | ~15,800 lines, plus ~2,200 of console CSS/JS/HTML |
-| Tests | **263, all passing** |
-| Docs | ~54,000 words across 12 documents, **31 ADRs** |
-| Deliverables | **29 met, 4 partial, 1 not built** — verify with `python scripts/audit.py` |
+| Tests | **277, all passing** |
+| Docs | ~55,000 words across 12 documents, **32 ADRs** |
+| Deliverables | **32 met, 1 partial, 1 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
-| Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else |
+| Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else — **including training** (ADR-0031) |
 
 ```bash
 pip install dpkt flask
 python testbed/certgen.py && python testbed/synth.py     # build the corpus
 python testbed/relink.py                                 # + 7 link-layer variants
 python scripts/analyse.py testbed/out/fleet.pcap --out out/ --trust testbed/certs/_ca.der
+./run.sh            # or .un.ps1 — builds, trains, verifies and serves
+python scripts/train_local.py                            # train: pure Python, 11 s
 python -m securemailscope.api                            # the Kavach console, port 8000
                                                          # analyst/analyst123 · admin/admin123
 python scripts/audit.py                                  # verify every deliverable
 python scripts/evaluate.py                               # measure accuracy; non-zero exit on disagreement
-for t in contract ml parsing tls certs report platform linklayer llm drift attacks; do python tests/test_$t.py; done
+for t in contract ml gbt parsing tls certs report platform linklayer llm drift attacks; do python tests/test_$t.py; done
 ```
 
 **Everything is pushed.** Git works from here now: the `libcurl-4.dll` block only affects
@@ -54,7 +56,7 @@ Control does not block. `core.sshCommand` is pinned in `.git/config`, so `git pu
 | `docs/01_PROBLEM_STATEMENT.md` | PS decomposed into 21 deliverables (D01–D21) + O01/O02, traceability matrix |
 | `docs/02_USP.md` | The 11 USPs, with judge Q&A and slide mapping. **The PPT reference** |
 | `docs/03_ARCHITECTURE.md` | Pipeline, data model, module ownership |
-| `docs/04_DECISIONS.md` | **31 ADRs.** Every non-obvious decision, with what was rejected |
+| `docs/04_DECISIONS.md` | **32 ADRs.** Every non-obvious decision, with what was rejected |
 | `docs/05_WORKLOG.md` | Session-by-session record, including every bug found |
 | `docs/06_STATUS.md` | Verified deliverable status (`06_STATUS_GENERATED.txt` is the raw audit output) |
 | `docs/07_RELATED_WORK.md` | Seven papers reviewed; what to adopt from each |
@@ -87,7 +89,7 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 | `securemailscope/certs/` | S5 | **Own DER/X.509 parser + real RSA signature verification** |
 | `securemailscope/rules/` | S6 | 34 rules, each with standards citations and config snippets |
 | `securemailscope/features/` | S7 | 51-field feature vector |
-| `securemailscope/ml/` | S8 | Classifier, anomaly, priority, corpus generator, training |
+| `securemailscope/ml/` | S8 | Classifier, anomaly, priority, corpus. **`gbt.py` + `iforest.py`: own trainer, stdlib only** (ADR-0031) |
 | `securemailscope/llm/` | S8 | **Grounded narrative + hallucination verifier** (ADR-0028). Deterministic by default |
 | `securemailscope/report/` | S10 | JSON + single self-contained HTML |
 | `securemailscope/store.py` | — | stdlib `sqlite3`, five tables, no ORM |
@@ -134,7 +136,7 @@ when a judge asks "how do you stop it hallucinating?" — the answer is a mechan
 
 | Blocked | Consequence |
 |---|---|
-| `numpy` (`_multiarray_umath`) | No scikit-learn → no trained model (ADR-0012) |
+| `numpy` (`_multiarray_umath`) | No scikit-learn → **wrote our own trainer** (ADR-0031) |
 | `cryptography` (`_rust`) | Wrote our own DER/X.509 parser (ADR-0017) |
 | `openssl` | Wrote `testbed/certgen.py` to generate certificates |
 | Pillow (`_imaging`) | PDF renderer stubs PIL before importing ReportLab |
@@ -147,8 +149,8 @@ when a judge asks "how do you stop it hallucinating?" — the answer is a mechan
 
 **Known good:** `dpkt`, `flask`, `starlette`, `jinja2`, `reportlab` (with the PIL stub), stdlib `sqlite3`.
 
-**WSL2 is not installed.** Only still needed for the ML training path — and **Colab is the faster route**
-(`notebooks/train_models.ipynb` + `data/corpus.csv`, ~15 min).
+**WSL2 is not installed, and is no longer needed.** Training runs locally in pure Python (ADR-0031).
+`notebooks/train_models.ipynb` still exists as an optional cross-check; it is not the path.
 
 **To push:** just `git push`. The remote is `git@github.com:...` and `core.sshCommand` points
 at `C:/Windows/System32/OpenSSH/ssh.exe`. If a new clone fails, redo those two settings —
@@ -159,9 +161,10 @@ PowerShell or a normal terminal.)
 
 ## 6. Known gaps, in priority order
 
-1. **No trained model.** `notebooks/train_models.ipynb` is ready; run it in Colab with `data/corpus.csv` and
-   drop the output into `models/`. → **D16 and D17 go PARTIAL → MET.** Bar to beat: baseline MAE **0.1683**;
-   if the model loses, the notebook says so and the baseline ships.
+1. ~~**No trained model.**~~ **Done (ADR-0031).** `python scripts/train_local.py` — pure Python, no numpy,
+   no Colab, 11 seconds. Held-out MAE **0.0451** vs baseline **0.1681**, 73% better, R² 0.94.
+   `archetype` is excluded as generator leakage. The trainer refuses to write a model that loses to the
+   baseline. **Nothing is blocked on a human any more.**
 2. ~~**`securemailscope/llm/` is a stub.**~~ **Done (ADR-0028). O02 is MET.** Grounded fact sheet,
    deterministic template that ships by default, and a verifier that discards any generated prose naming a
    host, rule, RFC or CVE not in the facts. USP-04 stays PARTIAL only because **layer 1 needs the trained

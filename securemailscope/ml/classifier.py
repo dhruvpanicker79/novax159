@@ -122,6 +122,23 @@ class RiskModel:
         baseline and says so in `backend`, which the UI displays. Failing
         loudly here would take the demo down; failing visibly does not.
         """
+        # Prefer the locally trained model: pure Python, JSON on disk, no numpy
+        # and no Colab (ADR-0031). The joblib path below stays for a model
+        # trained elsewhere, but nothing in this repo produces one any more.
+        local = Path(model_dir) / "risk_model.json"
+        if local.exists():
+            try:
+                from .gbt import GradientBoostedTrees
+
+                trained = GradientBoostedTrees.load(local)
+                return cls(backend="gradient_boosting", model=trained,
+                           feature_names=trained.feature_names,
+                           version=trained.version)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[risk] local model unreadable ({type(exc).__name__}); "
+                      f"using the rule-derived baseline")
+                return cls(backend="rule_baseline")
+
         path = Path(model_dir) / "risk_classifier.joblib"
         if not path.exists():
             return cls(backend="rule_baseline")
@@ -149,7 +166,10 @@ class RiskModel:
         findings = evaluate(ctx) if findings is None else findings
 
         if self.backend == "gradient_boosting" and self.model is not None:
-            risk, contributions = self._model_score(ctx, findings)
+            if hasattr(self.model, "explain_row"):        # our own trainer
+                risk, contributions = self._local_score(ctx, findings)
+            else:                                         # a joblib sklearn model
+                risk, contributions = self._model_score(ctx, findings)
         else:
             risk, contributions = baseline_score(findings)
 
@@ -161,6 +181,57 @@ class RiskModel:
             blast_radius=self._blast_radius(ctx),
             model_version=f"{self.backend}-{self.version}",
         )
+
+    def _row_for(self, ctx: RuleContext) -> list[float] | None:
+        """Build the model's input row **by feature name**, not by position.
+
+        The trained model carries its own `feature_names`, which include `port`
+        and one-hot `port_role=` columns that are not fields of `FeatureVector`.
+        Mapping by name means adding a feature to the schema cannot silently
+        shift every column by one - it fails loudly instead.
+        """
+        if not self.feature_names:
+            return None
+        values = dict(zip(ctx.features.field_names(), ctx.features.as_row()))
+        values["port"] = float(ctx.port or 0)
+        role = getattr(ctx.port_role, "value", str(ctx.port_role))
+        row: list[float] = []
+        for name in self.feature_names:
+            if name.startswith("port_role="):
+                row.append(1.0 if name.split("=", 1)[1] == role else 0.0)
+            elif name in values:
+                row.append(values[name])
+            else:
+                return None                  # schema drifted; fall back loudly
+        return row
+
+    def _local_score(self, ctx: RuleContext,
+                     findings: list[Finding]) -> tuple[float, list[ShapContribution]]:
+        """Pure-Python gradient boosting, with exact path contributions."""
+        from .gbt import GradientBoostedTrees
+
+        model: GradientBoostedTrees = self.model          # type: ignore[assignment]
+        row = self._row_for(ctx)
+        if row is None:
+            return baseline_score(findings)
+
+        risk, contributions = model.explain_row(row)
+        risk = max(0.0, min(1.0, risk))
+
+        out = [
+            ShapContribution(
+                feature=name,
+                value=float(row[i]),
+                contribution=round(float(contributions[i]), 4),
+                human_readable=humanise(name, row[i]),
+            )
+            for i, name in enumerate(self.feature_names or [])
+            if abs(contributions[i]) > 1e-4
+        ]
+        out.sort(key=lambda c: -abs(c.contribution))
+        if not out:
+            _, out = baseline_score(findings)
+        return round(risk, 4), out
 
     def _model_score(self, ctx: RuleContext,
                      findings: list[Finding]) -> tuple[float, list[ShapContribution]]:
@@ -249,36 +320,43 @@ class RiskModel:
 # Feature names in English, for the waterfall labels
 # --------------------------------------------------------------------------- #
 
+#: `feature -> (phrase when the value is 0, phrase when it is 1)`.
+#:
+#: **Read that ordering carefully.** It is positional, not good-then-bad. Six
+#: entries were originally written as (good, bad), which is the same thing only
+#: when 1 means "bad" - so `has_forward_secrecy=1` rendered as "No forward
+#: secrecy" and `pq_hybrid_offered=1` as "No post-quantum group offered", in the
+#: explanation panel that exists to demonstrate USP-04.
 _LABELS: dict[str, tuple[str, str]] = {
     "tls_version_num": ("Modern TLS version", "Old TLS version"),
     "is_deprecated_version": ("Version not deprecated", "Deprecated TLS version"),
     "cipher_is_rc4": ("", "RC4 cipher suite negotiated"),
     "cipher_is_3des": ("", "3DES cipher suite negotiated"),
     "cipher_is_cbc": ("", "Non-AEAD CBC cipher suite"),
-    "cipher_is_aead": ("AEAD cipher suite", ""),
+    "cipher_is_aead": ("", "AEAD cipher suite"),
     "cipher_is_export": ("", "Export-grade cipher suite"),
     "cipher_is_null_or_anon": ("", "NULL or anonymous cipher suite"),
-    "has_forward_secrecy": ("Forward secrecy present", "No forward secrecy"),
-    "pq_hybrid_offered": ("Hybrid post-quantum group offered", "No post-quantum group offered"),
+    "has_forward_secrecy": ("No forward secrecy", "Forward secrecy present"),
+    "pq_hybrid_offered": ("No post-quantum group offered", "Hybrid post-quantum group offered"),
     "cert_is_expired": ("Certificate within validity", "Certificate has expired"),
     "cert_is_self_signed": ("", "Self-signed certificate"),
-    "cert_key_bits": ("Adequate certificate key size", "Short certificate key"),
+    "cert_key_bits": ("Certificate key size not observed", ""),
     "cert_sig_is_weak": ("", "Weak certificate signature algorithm"),
-    "cert_chain_complete": ("Complete certificate chain", "Incomplete certificate chain"),
-    "cert_hostname_match": ("Hostname matches certificate", "Hostname mismatch"),
+    "cert_chain_complete": ("Incomplete certificate chain", "Complete certificate chain"),
+    "cert_hostname_match": ("Hostname mismatch", "Hostname matches certificate"),
     "cert_opaque_tls13": ("", "Certificate encrypted (TLS 1.3)"),
     "credentials_in_cleartext": ("", "Credentials sent without encryption"),
     "starttls_stripped_suspected": ("", "STARTTLS capability stripped in transit"),
-    "starttls_completed": ("STARTTLS upgrade completed", "STARTTLS upgrade did not complete"),
+    "starttls_completed": ("STARTTLS upgrade did not complete", "STARTTLS upgrade completed"),
     "auth_before_tls": ("", "Plaintext AUTH offered before TLS"),
     "downgrade_sentinel_present": ("", "TLS downgrade sentinel present"),
     "cipher_intersection_anomaly": ("", "Weaker suite than both parties supported"),
     "certificate_substitution": ("", "Server presented differing certificates"),
     "tls_mode_is_cleartext": ("", "Session never encrypted"),
-    "port_role_is_relay": ("MTA relay: opportunistic TLS per RFC 7435", ""),
+    "port_role_is_relay": ("", "MTA relay: opportunistic TLS per RFC 7435"),
     "port_role_is_submission": ("", "Submission port carries credentials"),
     "port_role_is_access": ("", "Mail access port carries credentials"),
-    "renegotiation_info_present": ("Secure renegotiation supported", "Secure renegotiation absent"),
+    "renegotiation_info_present": ("Secure renegotiation absent", "Secure renegotiation supported"),
     "compression_enabled": ("", "TLS compression enabled"),
     "sni_present": ("SNI sent", "No SNI sent"),
 }

@@ -13,6 +13,7 @@ that is what a judge will find too.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -191,23 +192,46 @@ def deliverables(report: Report) -> list[Check]:
 
     # -- D16 AI risk scoring ------------------------------------------------
     scored = [s for s in sessions if s.assessment]
-    backends = {s.assessment.model_version.split("-")[0] for s in scored}
-    trained = any(b == "gradient" for b in backends)
+    # `model_version` is "<backend>-<version>", and the backend itself contains
+    # a hyphen-free underscore, so compare the prefix. The old check was
+    # `== "gradient"` against a value of "gradient_boosting", which could never
+    # be true - D16 would have stayed PARTIAL even with a model loaded.
+    backends = {s.assessment.model_version.rsplit("-", 1)[0] for s in scored}
+    trained = any(b.startswith("gradient") for b in backends)
+    metrics_path = ROOT / "models" / "metrics.json"
+    metrics = {}
+    if metrics_path.exists():
+        try:
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            metrics = {}
     add("D16", "AI-based cryptographic risk scoring",
-        PARTIAL if scored and not trained else (MET if trained else MISSING),
-        f"{len(scored)} sessions scored with explanations; backend "
-        f"{sorted(backends)}. The trained classifier needs scikit-learn, which "
-        f"is blocked on this machine (ADR-0012), so the rule-derived baseline ran",
-        "ml/classifier.py")
+        MET if trained else (PARTIAL if scored else MISSING),
+        f"{len(scored)} sessions scored with per-feature explanations; backend "
+        f"{sorted(backends)}. "
+        + (f"Trained locally in pure Python (ADR-0031): held-out MAE "
+           f"{metrics.get('model_mae')} vs baseline {metrics.get('baseline_mae')}, "
+           f"{metrics.get('improvement', 0):.0%} better, R^2 {metrics.get('r_squared')}"
+           if trained and metrics else
+           "no trained model present; the rule-derived baseline ran. "
+           "Run `python scripts/train_local.py`"),
+        "ml/classifier.py, ml/gbt.py")
 
     # -- D17 anomaly detection ----------------------------------------------
     anomalous = [s for s in scored if s.assessment.is_anomalous]
     with_reasons = [s for s in anomalous if s.assessment.anomaly_reasons]
+    forest_path = ROOT / "models" / "anomaly_forest.json"
+    forest_trained = forest_path.exists()
     add("D17", "AI-assisted anomaly detection",
-        PARTIAL if scored else MISSING,
-        f"{len(anomalous)} flagged, {len(with_reasons)} with stated reasons; "
-        f"JA3 rarity + peer deviation ran. Isolation Forest needs scikit-learn",
-        "ml/anomaly.py")
+        MET if (scored and forest_trained) else (PARTIAL if scored else MISSING),
+        f"{len(anomalous)} flagged, {len(with_reasons)} with stated reasons. "
+        f"Two layers: JA3 rarity + peer deviation within the capture, and "
+        + (f"a corpus-trained isolation forest (ADR-0031), threshold "
+           f"{metrics.get('anomaly_threshold')}, flagging "
+           f"{metrics.get('anomaly_flag_rate', 0):.1%} of held-out rows"
+           if forest_trained else
+           "no trained forest; run `python scripts/train_local.py`"),
+        "ml/anomaly.py, ml/iforest.py")
 
     # -- D18 prioritised findings ------------------------------------------
     ranks = [f.severity.rank for f in findings]

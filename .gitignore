@@ -19,6 +19,10 @@ reports/
 testbed/certs/
 testbed/out/
 models/
+# ...but keep the training results. The models themselves are a build
+# artifact reproducible in 11 seconds (`scripts/train_local.py`); the
+# metrics are evidence, and the deck quotes them.
+!models/metrics.json
 
 # generated analysis artifacts
 out/

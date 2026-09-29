@@ -977,3 +977,85 @@ unchanged at precision 1.00 / recall 1.00 — the matrix reads the analysis and 
 useful severity is what it costs *here*, which the port role already decides). Attempting exploitation
 to confirm feasibility (the entire project is passive). Listing only feasible attacks — which would have
 halved the work and removed the reason it is interesting.
+
+---
+
+## ADR-0031 — Train the model locally, in pure Python, and stop depending on Colab
+
+**Date:** 2026-09-29 · **Status:** Accepted (supersedes the training half of ADR-0012)
+
+**Context.** ADR-0012 concluded that no trained model was possible here: Smart App Control blocks numpy's
+C extensions, scikit-learn will not install, and the answer was `notebooks/train_models.ipynb` on Colab.
+That left the project's only remaining human-blocked item, and it made the demo's AI layer depend on a
+Google login — for a tool whose entire pitch is that it has no dependencies to be blocked.
+
+That conclusion was too quick. The blocked thing is *scikit-learn*, not *machine learning*. The corpus is
+10,000 rows by 54 features, which is small, and this project has already written a DER parser, RSA
+signature verification and a certificate generator from scratch for exactly the same reason.
+
+**Decision.** `securemailscope/ml/gbt.py` (histogram gradient-boosted regression trees) and
+`ml/iforest.py` (isolation forest), pure stdlib, plus `scripts/train_local.py`. Training takes **eleven
+seconds** and needs nothing that is not already installed.
+
+Histogram-based split finding, following LightGBM (Ke et al., NIPS 2017): each feature is bucketed into
+at most 64 bins once, so split search scans bins rather than rows. That is the difference between a
+one-minute run and a twenty-minute one, and in CPython it is what makes this practical at all.
+
+**Results on held-out data** — 8,000 train / 2,000 held out, split by index:
+
+| | |
+|---|---|
+| Rule-derived baseline MAE | **0.1681** |
+| Trained model MAE | **0.0451** |
+| Improvement | **73%** |
+| R² | 0.9429 |
+| Spearman (ordering, which is what a triage queue needs) | 0.9225 |
+
+**`archetype` is excluded as leakage**, and finding that mattered more than the model. It is the corpus
+generator's latent variable: it decides how a row is drawn, is not a field of `FeatureVector`, and does
+not exist when a real session is scored. Training on it would have taught the model
+"archetype=compromised implies high risk" — circular, flattering, and worthless on real traffic.
+
+**Explanations are exact, not approximate.** Contributions come from path decomposition (Saabas): each
+split attributes the change in node mean to the feature that caused it, and they sum to
+`prediction − bias`. `test_contributions_sum_exactly_to_the_prediction` asserts that identity, and it
+immediately caught a missing term — each tree's **root value** is the mean residual before any split, so
+it belongs to no feature and folds into the bias. The contributions were "nearly right", which is the
+kind of wrong an explanation panel ships with.
+
+**The trainer refuses to write a model that loses.** The rule-derived baseline is a real product. If the
+model does not beat it on held-out data, `train_local.py` prints why and exits non-zero without writing,
+and the baseline ships. `--force` exists for a deliberate override.
+
+**The grade stays rule-derived.** Wiring the model in immediately produced two regressions: a session
+with **zero findings** graded B because the model returned 0.18, and a host whose handshake could not be
+parsed graded **F** rather than `?`. Host scoring had been reading `assessment.risk_score`, which was
+findings-derived only because the baseline is. The fix is a principle, not a patch: **the posture grade
+(D19) is computed from findings, every one of which carries an RFC citation and frame numbers; the model
+scores risk for triage (D16) and ordering (D18).** A model that can move a grade with nothing to point
+at would make the headline number the one thing in the report that cannot be checked.
+
+Note the second regression was ADR-0014 half-implemented — the guard downgraded A+/A/B to `?` but had
+nothing to stop a host we could not inspect being *condemned*. Over-crediting and over-condemning an
+uninspected host are the same error.
+
+**One pre-existing bug surfaced.** `_LABELS` in `ml/classifier.py` is read as *(phrase when 0, phrase
+when 1)*, but six entries were written as *(good, bad)* — the same thing only when 1 means bad. So
+`has_forward_secrecy=1` rendered as **"No forward secrecy"** and `pq_hybrid_offered=1` as **"No
+post-quantum group offered"**, in the panel that exists to demonstrate USP-04. It was invisible while the
+baseline rarely surfaced those features; the trained model put them at the top of the waterfall.
+
+**Consequence.** **D16 and D17 go PARTIAL → MET**, and USP-04 with them — the audit reads **32 met /
+1 partial / 1 not built**. Nothing is blocked on a human any more. `run.sh` / `run.ps1` bring a clean
+checkout to a running console in one command. 15 new tests, 277 total. `scripts/evaluate.py` unchanged
+at precision 1.00 / recall 1.00, because the rule engine is untouched.
+
+**The audit was wrong too.** D16's check was `backend == "gradient"` against a value of
+`"gradient_boosting"`, so it could never have reported MET even with a model loaded. Fixed, and it now
+quotes the held-out metrics rather than asserting a file exists.
+
+**Rejected.** Keeping the Colab notebook as the primary path (a demo that needs a Google login is a demo
+that can fail on someone else's network). Pickle or joblib for the model file (both want numpy here;
+JSON is 674 KB and readable). Implementing full TreeSHAP (path decomposition is exact for this and an
+order of magnitude simpler). Deleting the notebook — it stays as a cross-check, now clearly marked
+optional.

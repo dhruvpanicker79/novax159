@@ -13,9 +13,9 @@ Nothing in the repo can move these.
 - [x] **Push the outstanding commits.** **Done — 15 commits pushed 29 Sep 2026.** The
       `libcurl-4.dll` block only affects HTTPS; the remote is now SSH over Windows' own
       `ssh.exe`, which Smart App Control permits. No GUI client was needed after all.
-- [ ] **Run `notebooks/train_models.ipynb` in Colab** with `data/corpus.csv`. Drop the three output files into
-      `models/`. → **D16 and D17 go PARTIAL → MET.** The bar to beat is baseline MAE **0.1683**; if the model
-      loses, the notebook says so and the baseline is what ships.
+- [x] **Train the model.** **Done (ADR-0031) — locally, in pure Python.** `python
+      scripts/train_local.py`, 11 seconds, no numpy and no Colab. Held-out MAE **0.0451** vs
+      baseline **0.1681**. D16 and D17 are MET, and USP-04 with them.
 - [ ] **Fix the MITM box on the user-flow slide.** The flowchart currently shows *our tool* performing
       `MITM ATTACK → FORCE PLAINTEXT DOWNGRADE`. It contradicts the PS (passive), our own scope boundary, and
       USP-02. Replace with `Downgrade evidence present? → classify attack evidence`. Also drop

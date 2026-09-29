@@ -45,6 +45,7 @@ from schema import (
 from . import certs as certs_stage
 from . import features as features_stage
 from .capture.ingest import load_capture
+from .ml.classifier import baseline_score
 from .capture.reassemble import reassemble
 from .ml import anomaly as anomaly_stage
 from .ml import priority as priority_stage
@@ -250,7 +251,19 @@ def _roll_up_hosts(sessions: list[MailSession]) -> list[HostPosture]:
 
     for host, hp in hosts.items():
         group = [s for s in sessions if (s.server_host or "unknown") == host]
-        worst = max((s.assessment.risk_score for s in group if s.assessment), default=0.0)
+
+        # **The grade is rule-derived, not model-derived.** The trained model
+        # scores risk for triage (D16) and ordering (D18); the posture grade
+        # (D19) is scored from the findings, every one of which carries an RFC
+        # citation and frame numbers. Letting a model move a grade with no
+        # finding behind it would make the headline number the one thing in the
+        # report nobody can check - see ADR-0031.
+        #
+        # This is not hypothetical: when the trained model was first wired in,
+        # a session with *zero findings* graded B because the model returned
+        # 0.18, and a host whose handshake could not be parsed graded F instead
+        # of "?" - condemning a host we had not managed to inspect.
+        worst = max((baseline_score(s.findings)[0] for s in group), default=0.0)
         hp.score = round(max(0.0, 100.0 - worst * 100), 1)
 
         # Capping rule. An average that hides a catastrophe is worse than no

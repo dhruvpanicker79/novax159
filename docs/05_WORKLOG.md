@@ -900,3 +900,69 @@ the code looks correct in both of these cases.**
 **Next:** USP-11 (passive DANE / MTA-STS) is the last unbuilt item. `docs/02_USP.md` settles the design
 — *"if the capture contains DNS traffic"* — so it is passive extraction, and the synthetic corpus needs
 DNS added first. D16/D17/USP-04 still wait on the Colab run.
+
+---
+
+## Session 12 — 2026-09-29 · local training, and nothing left blocked on a human
+
+**What shipped.** `ml/gbt.py`, `ml/iforest.py`, `scripts/train_local.py`, and `run.sh` / `run.ps1`.
+**D16 and D17 go PARTIAL → MET**, taking USP-04 with them. The audit reads **32 met / 1 partial /
+1 not built**. ADR-0031. 277 tests pass; `scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00.
+
+**The question that started it:** *"can't you create a bash file to boot up the model locally?"* The
+honest first answer was no — numpy and sklearn are blocked, and a shell script cannot unblock them. The
+better answer was that **the blocked thing is scikit-learn, not machine learning**. 10,000 rows by 54
+features is small, and this project has already written a DER parser, RSA verification and a certificate
+generator from scratch for the same reason.
+
+```
+  baseline MAE (held out)   0.1681
+  model    MAE (held out)   0.0451     73% better
+  R^2                       0.9429
+  Spearman                  0.9225     ordering, which is what a triage queue needs
+  training time             11 seconds, pure stdlib
+```
+
+ADR-0012 said no trained model was possible here. It was too quick, and ADR-0031 says so.
+
+### The catch that mattered more than the model
+
+**`archetype` is the corpus generator's latent variable** — it decides how a row is drawn, is not a
+field of `FeatureVector`, and does not exist when a real session is scored. Training on it teaches the
+model "archetype=compromised implies high risk", which is circular, flattering, and worthless on real
+traffic. Excluded, and the exclusion is printed by the trainer so nobody re-adds it.
+
+### Bugs found by running it
+
+**Wiring the model in broke grading, twice.** A session with **zero findings** graded B, because host
+scoring read `assessment.risk_score` — which was findings-derived only because the baseline is. And a
+host whose handshake could not be parsed graded **F** instead of `?`. The fix is a principle: **the
+posture grade is computed from findings; the model scores risk for triage and ordering.** A model that
+can move a grade with nothing to point at makes the headline number the one thing nobody can check.
+
+The second half is ADR-0014 half-implemented: the guard downgraded A+/A/B to `?`, but nothing stopped an
+uninspected host being *condemned*. Over-crediting and over-condemning are the same error.
+
+**The explanations did not add up.** `test_contributions_sum_exactly_to_the_prediction` failed by a
+small constant: each tree's **root value** is the mean residual before any split, so it belongs to no
+feature and folds into the bias. The contributions were "nearly right" — exactly the sort of wrong an
+explanation panel ships with, and only a reconciliation test catches.
+
+**A pre-existing label bug, newly visible.** `_LABELS` is read as *(phrase when 0, phrase when 1)*, but
+six entries were written *(good, bad)* — the same thing only when 1 means bad. So
+`has_forward_secrecy=1` rendered as **"No forward secrecy"** and `pq_hybrid_offered=1` as **"No
+post-quantum group offered"**, in the panel that demonstrates USP-04. Invisible while the baseline rarely
+surfaced those features; the trained model put them at the top of the waterfall.
+
+**The audit could never have passed D16.** Its check was `backend == "gradient"` against a value of
+`"gradient_boosting"`. Even a correctly loaded model would have read PARTIAL. That is the third time the
+audit itself has been the thing that was wrong — **it is code, and it lies the same way code does.**
+
+### One command
+
+`./run.sh` (or `.\run.ps1`) takes a clean checkout to a running console: checks dependencies by **call
+path** rather than import, builds certificates, captures and link-layer variants, trains if needed,
+runs the audit and the evaluation, then serves. Idempotent, so a warm checkout starts in a second.
+
+**Next:** USP-11 (passive DANE / MTA-STS) is the only unbuilt item, and D20's PDF needs Playwright,
+which is blocked. Nothing is waiting on a human.

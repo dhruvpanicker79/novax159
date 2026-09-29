@@ -1,0 +1,28 @@
+{
+  "trained_at": "2026-09-29T14:19:47",
+  "corpus_rows": 10000,
+  "features": 55,
+  "excluded_as_leakage": [
+    "archetype"
+  ],
+  "train_rows": 8000,
+  "holdout_rows": 2000,
+  "baseline_mae": 0.1681,
+  "model_mae": 0.0451,
+  "improvement": 0.7318,
+  "r_squared": 0.9429,
+  "spearman": 0.9225,
+  "anomaly_threshold": 0.5856,
+  "anomaly_flag_rate": 0.0495,
+  "trainer": "securemailscope.ml.gbt (pure Python)",
+  "top_features": [
+    "kex_group_bits",
+    "cert_days_to_expiry",
+    "starttls_stripped_suspected",
+    "cert_chain_complete",
+    "downgrade_sentinel_present",
+    "cipher_intersection_anomaly",
+    "cert_hostname_match",
+    "auth_before_tls"
+  ]
+}
