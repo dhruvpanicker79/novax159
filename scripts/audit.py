@@ -400,8 +400,28 @@ def usps(report: Report) -> list[Check]:
         f"{len(attacks)} named attacks attached to findings ({sorted(attacks)[:4]}...), "
         f"but no feasibility verdict column and no dedicated panel")
 
-    add("USP-10", "Temporal posture drift", MISSING,
-        "not built; needs two captures diffed")
+    # Run the diff rather than assert it exists — the same lesson as O02.
+    drift_verdict, drift_note = MISSING, "not built"
+    later = ROOT / "testbed" / "out" / "fleet_later.pcap"
+    if later.exists():
+        try:
+            from securemailscope.drift import compare
+            from securemailscope.pipeline import analyse as _analyse
+            trust = [str(ROOT / "testbed" / "certs" / "_ca.der")]
+            other = _analyse(later, trust_store_paths=[t for t in trust
+                                                       if Path(t).exists()] or None)
+            d = compare(report, other)
+            moved = [h for h in d.hosts if h.status not in ("unchanged",)]
+            drift_verdict = MET if (d.comparable and moved) else PARTIAL
+            drift_note = (
+                f"{d.before_capture} vs {d.after_capture}: {d.host_overlap:.0%} host "
+                f"overlap, grade {d.before_grade}->{d.after_grade}, "
+                f"{len(d.appeared)} appeared / {len(d.resolved)} resolved / "
+                f"{d.persisted_count} carried forward, {len(moved)} hosts moved. "
+                f"Refuses to diff estates that do not overlap")
+        except Exception as exc:  # noqa: BLE001
+            drift_verdict, drift_note = PARTIAL, f"drift module raised {type(exc).__name__}"
+    add("USP-10", "Temporal posture drift", drift_verdict, drift_note)
     add("USP-11", "Passive DNS / DANE / MTA-STS correlation", MISSING,
         "not built; needs DNS extraction from the capture")
 

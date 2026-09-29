@@ -255,6 +255,18 @@ export interface Flow {
   evidence: Evidence;
 }
 
+/** How one host's posture moved between two captures. USP-10. */
+export interface HostDrift {
+  host: string;
+  status: string;
+  before_grade: string;
+  after_grade: string;
+  before_score: number;
+  after_score: number;
+  appeared: string[];
+  resolved: string[];
+}
+
 /** Per-server rollup. The PS says 'infrastructureS' -- fleet view is required. */
 export interface HostPosture {
   host: string;
@@ -314,6 +326,29 @@ export interface Phase {
   byte_range_s2c: number[] | null;
   commands: string[];
   evidence: Evidence;
+}
+
+/** The diff between two captures of the same estate. USP-10. */
+export interface PostureDrift {
+  before_capture: string;
+  after_capture: string;
+  before_sha256: string;
+  after_sha256: string;
+  before_at: string | null;
+  after_at: string | null;
+  before_grade: string;
+  after_grade: string;
+  before_score: number;
+  after_score: number;
+  direction: string;
+  host_overlap: number;
+  comparable: boolean;
+  incomparable_reason: string;
+  appeared: Finding[];
+  resolved: Finding[];
+  persisted_count: number;
+  hosts: HostDrift[];
+  summary: string;
 }
 
 /** What to actually do about it. Objective O02. */

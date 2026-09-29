@@ -25,7 +25,7 @@ const MISCONFIG = new Set(['tls_version', 'cipher_suite', 'key_exchange', 'certi
 
 const S = {
   report: null, jobs: [], dispositions: {}, snapshots: [], audit: [], user: null,
-  tab: 'overview', focus: null, range: 'all',
+  tab: 'overview', focus: null, range: 'all', drift: null,
 };
 
 /* ─────────────── plumbing ─────────────── */
@@ -1154,6 +1154,134 @@ window.toggleAction = n => {
 /* The narrative uses **bold** sparingly; nothing else is interpreted. */
 const md = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 
+/* ─────────────── temporal drift (USP-10) ─────────────── */
+V.drift = () => {
+  if (S.snapshots.length < 2) {
+    return `<div class="panel" style="text-align:center;padding:56px 20px">
+      <div style="font-size:16px;font-weight:600;margin-bottom:6px">Needs two captures</div>
+      <div class="faint" style="font-size:13px;margin-bottom:6px">Drift is a diff. Analyse the
+        same estate twice and this fills in.</div>
+      <div class="faint" style="font-size:12px;margin-bottom:18px">
+        ${S.snapshots.length} snapshot${S.snapshots.length === 1 ? '' : 's'} archived so far.</div>
+      <button class="btn accent" onclick="location.hash='#captures'">Go to captures</button></div>`;
+  }
+  if (!S.drift) { loadDrift(); return '<div class="panel"><div class="empty">comparing…</div></div>'; }
+  const d = S.drift;
+
+  if (!d.comparable) {
+    return `<div class="panel" style="border-left:3px solid var(--medium)">
+      ${head('Not the same estate', 'alert')}
+      <p style="font-size:13.5px;line-height:1.7;margin:0">${esc(d.summary)}</p>
+      <dl class="kv" style="margin-top:16px">
+        <dt>Earlier capture</dt><dd>${esc(d.before_capture)}</dd>
+        <dt>Later capture</dt><dd>${esc(d.after_capture)}</dd>
+        <dt>Host overlap</dt><dd>${Math.round(d.host_overlap * 100)}%</dd>
+      </dl>
+      <p class="note" style="margin:14px 0 0">Two snapshots are posture drift only when they cover
+      the same infrastructure. Diffing unrelated captures produces a number that is arithmetically
+      correct and operationally meaningless, so this panel refuses rather than reports.</p>
+      ${driftPicker()}</div>`;
+  }
+
+  const moved = d.hosts.filter(h => h.status !== 'unchanged');
+  const dirClass = d.direction === 'regressed' ? 'down'
+                 : d.direction === 'improved' ? 'up' : 'faint';
+  const edge = d.direction === 'regressed' ? 'critical'
+             : d.direction === 'improved' ? 'ok' : 'line-2';
+
+  return `
+  <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpi"><div class="k">Fleet grade</div>
+      <div class="row"><div class="v">
+        <span class="grade ${gradeClass(d.before_grade)}">${esc(d.before_grade)}</span>
+        <span class="faint" style="font-size:17px"> &rarr; </span>
+        <span class="grade ${gradeClass(d.after_grade)}">${esc(d.after_grade)}</span></div></div>
+      <div class="note">${d.before_score.toFixed(1)} &rarr; ${d.after_score.toFixed(1)}
+        (${d.after_score >= d.before_score ? '+' : ''}${(d.after_score - d.before_score).toFixed(1)})</div>
+    </div>
+    ${kpi('New findings', num(d.appeared.length), [], COLOR.critical,
+          { invert: true, note: 'not present in the earlier capture' })}
+    ${kpi('Resolved', num(d.resolved.length), [], COLOR.ok,
+          { note: 'gone since the earlier capture' })}
+    ${kpi('Carried forward', num(d.persisted_count), [], COLOR.medium,
+          { invert: true, note: 'still open in both' })}
+  </div>
+
+  <div class="panel" style="margin-bottom:14px;border-left:3px solid var(--${edge})">
+    ${head('What changed', 'activity', `<span class="${dirClass}">${esc(d.direction)}</span>`)}
+    <p style="font-size:14px;line-height:1.75;margin:0">${md(d.summary)}</p>
+    <dl class="kv" style="margin-top:16px">
+      <dt>Earlier</dt><dd>${esc(d.before_capture)} · ${esc((d.before_sha256 || '').slice(0, 12))}</dd>
+      <dt>Later</dt><dd>${esc(d.after_capture)} · ${esc((d.after_sha256 || '').slice(0, 12))}</dd>
+      <dt>Host overlap</dt><dd>${Math.round(d.host_overlap * 100)}%</dd>
+    </dl>
+    ${driftPicker()}
+  </div>
+
+  <div class="grid g-3-2">
+    <div class="panel flush">
+      ${head('Hosts that moved', 'server',
+             `<span class="faint">${moved.length} of ${d.hosts.length}</span>`)}
+      <table><thead><tr>
+        <th>Host</th><th>Status</th><th>Grade</th><th>Delta</th><th>Changed findings</th>
+      </tr></thead><tbody>
+      ${moved.map(h => `<tr>
+        <td class="mono nowrap">${esc(h.host)}</td>
+        <td><span class="sev ${h.status === 'regressed' ? 'sev-critical'
+          : h.status === 'improved' ? 'sev-low'
+          : h.status === 'new' ? 'sev-medium' : 'sev-info'}">${h.status}</span></td>
+        <td class="mono nowrap">
+          <span class="grade ${gradeClass(h.before_grade)}">${esc(h.before_grade || '—')}</span>
+          <span class="faint"> &rarr; </span>
+          <span class="grade ${gradeClass(h.after_grade)}">${esc(h.after_grade || '—')}</span></td>
+        <td class="mono ${h.after_score >= h.before_score ? 'up' : 'down'}">
+          ${(h.after_score - h.before_score) >= 0 ? '+' : ''}${(h.after_score - h.before_score).toFixed(1)}</td>
+        <td style="font-size:11px">
+          ${h.appeared.map(r => `<div class="down mono">+ ${esc(r)}</div>`).join('')}
+          ${h.resolved.map(r => `<div class="up mono">&minus; ${esc(r)}</div>`).join('')}
+        </td></tr>`).join('') || '<tr><td colspan="5" class="empty">No host changed.</td></tr>'}
+      </tbody></table>
+    </div>
+
+    <div class="panel flush">
+      ${head('New findings', 'alert')}
+      <table><thead><tr><th>Severity</th><th>Finding</th><th>Host</th></tr></thead><tbody>
+      ${d.appeared.slice(0, 12).map(f => `<tr>
+        <td><span class="sev sev-${f.severity}">${f.severity}</span></td>
+        <td>${esc(f.title)}<div class="mono faint" style="font-size:10.5px">${esc(f.rule_id)}</div></td>
+        <td class="mono dim nowrap">${esc(f.affected_host || '')}</td>
+      </tr>`).join('') || '<tr><td colspan="3" class="empty">Nothing new.</td></tr>'}
+      </tbody></table>
+    </div>
+  </div>`;
+};
+
+/* Two selects and a button. Defaults to the two most recent snapshots, which is
+   what a returning analyst wants without touching anything. */
+function driftPicker() {
+  const opt = (s, sel) => `<option value="${esc(s.snapshot_id)}"${sel ? ' selected' : ''}>`
+    + `${esc((s.captured_at || '').slice(0, 16).replace('T', ' '))} · ${esc(s.fleet_grade)}</option>`;
+  return `<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:16px">
+    <span class="faint" style="font-size:12px">compare</span>
+    <select class="sel" id="driftBefore">${S.snapshots.map((s, i) => opt(s, i === 1)).join('')}</select>
+    <span class="faint" style="font-size:12px">with</span>
+    <select class="sel" id="driftAfter">${S.snapshots.map((s, i) => opt(s, i === 0)).join('')}</select>
+    <button class="btn" onclick="loadDrift($('#driftBefore').value, $('#driftAfter').value)">Compare</button>
+  </div>`;
+}
+
+window.loadDrift = async (before, after) => {
+  const qs = before && after ? `?before=${before}&after=${after}` : '';
+  try {
+    S.drift = await api('/api/drift' + qs);
+  } catch (e) {
+    S.drift = null;
+    toast(e.message, 'bad');
+    return;
+  }
+  if (location.hash === '#drift') render();
+};
+
 V.reports = () => {
   const job = S.jobs.find(j => j.state === 'completed');
   const drift = S.snapshots.length > 1
@@ -1471,6 +1599,7 @@ const TITLES = {
   sessions: ['Sessions', 'Every reconstructed SMTP, IMAP and POP3 conversation'],
   findings: ['Findings', 'Prioritised weaknesses with analyst dispositions'],
   plan: ['Remediation Plan', 'What to actually do, in the order to do it'],
+  drift: ['Posture Drift', 'What changed between two captures of the same estate'],
   session: ['Session Details', 'Full analysis of the selected session'],
   exposure: ['Exposure Map', 'Observed topology of the mail estate'],
   certificates: ['Certificates', 'X.509 chains observed on the wire'],

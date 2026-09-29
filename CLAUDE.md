@@ -22,9 +22,9 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 | | |
 |---|---|
 | Python | ~15,800 lines, plus ~2,200 of console CSS/JS/HTML |
-| Tests | **231, all passing** |
-| Docs | ~52,000 words across 12 documents, **29 ADRs** |
-| Deliverables | **27 met, 5 partial, 2 not built** — verify with `python scripts/audit.py` |
+| Tests | **247, all passing** |
+| Docs | ~53,000 words across 12 documents, **30 ADRs** |
+| Deliverables | **28 met, 5 partial, 1 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
 | Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else |
 
@@ -37,7 +37,7 @@ python -m securemailscope.api                            # the Kavach console, p
                                                          # analyst/analyst123 · admin/admin123
 python scripts/audit.py                                  # verify every deliverable
 python scripts/evaluate.py                               # measure accuracy; non-zero exit on disagreement
-for t in contract ml parsing tls certs report platform linklayer llm; do python tests/test_$t.py; done
+for t in contract ml parsing tls certs report platform linklayer llm drift; do python tests/test_$t.py; done
 ```
 
 **Eight commits are unpushed.** Git cannot push from this machine — see §5.
@@ -52,7 +52,7 @@ for t in contract ml parsing tls certs report platform linklayer llm; do python 
 | `docs/01_PROBLEM_STATEMENT.md` | PS decomposed into 21 deliverables (D01–D21) + O01/O02, traceability matrix |
 | `docs/02_USP.md` | The 11 USPs, with judge Q&A and slide mapping. **The PPT reference** |
 | `docs/03_ARCHITECTURE.md` | Pipeline, data model, module ownership |
-| `docs/04_DECISIONS.md` | **29 ADRs.** Every non-obvious decision, with what was rejected |
+| `docs/04_DECISIONS.md` | **30 ADRs.** Every non-obvious decision, with what was rejected |
 | `docs/05_WORKLOG.md` | Session-by-session record, including every bug found |
 | `docs/06_STATUS.md` | Verified deliverable status (`06_STATUS_GENERATED.txt` is the raw audit output) |
 | `docs/07_RELATED_WORK.md` | Seven papers reviewed; what to adopt from each |
@@ -90,6 +90,7 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 | `securemailscope/report/` | S10 | JSON + single self-contained HTML |
 | `securemailscope/store.py` | — | stdlib `sqlite3`, five tables, no ORM |
 | `securemailscope/siem.py` | — | CEF and ECS export |
+| `securemailscope/drift.py` | — | **Temporal posture drift** (ADR-0029). Refuses estates that do not overlap |
 | `securemailscope/api/` | — | **Flask** service, stdlib auth (ADR-0024), and the twelve-view console (ADR-0026) |
 | `testbed/` | — | `synth.py` writes PCAPs byte by byte; `certgen.py` makes signed certs |
 
@@ -161,7 +162,10 @@ when a judge asks "how do you stop it hallucinating?" — the answer is a mechan
    model** — run Colab and it flips to MET.
 3. **USP-09 attack feasibility matrix** — `Finding.related_attacks` exists; needs feasibility verdicts and a panel.
 4. **USP-11 DANE / MTA-STS** — the highest-value unbuilt feature, see §7.
-5. **USP-10 temporal drift** — now cheap: `PostureSnapshot` already archives every run, so two snapshots are a diff.
+5. ~~**USP-10 temporal drift.**~~ **Done (ADR-0029).** `fleet.pcap` vs `fleet_later.pcap`: the fleet score
+   moves −0.3 while one host falls 99 points and another rises 96. Refuses to diff estates with under 50%
+   host overlap, because the arithmetic works on any two reports and a confident wrong trend is worse than
+   a blank panel.
 6. ~~**Link-layer coverage.**~~ **Done (ADR-0027).** Ethernet + 802.1Q/QinQ, Linux cooked v1/v2, raw
    IPv4/IPv6, BSD loopback, and the IPv6 extension-header chain. Five of seven encapsulations previously
    lost *every frame* and reported a clean A+. An undecodable capture now grades `?`, never A+.

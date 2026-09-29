@@ -145,6 +145,18 @@ that the text describes that report rather than being asked to trust it.
 thirteen sessions with one weak cipher is one action, and two rules closed by the same config line is
 one action. 30 findings become 17 actions on the corpus.
 
+### Temporal drift (ADR-0029)
+
+`drift.py` diffs two finished reports into a `PostureDrift`. Findings are matched on `rule_id@host:port`,
+the same key dispositions use, so an analyst's decision and a drift entry name the same thing — a
+*condition on an endpoint*, which is why the key is intentionally not unique within a single report.
+
+`comparable` is the field that matters. Below 50% host overlap the diff is refused rather than reported:
+the arithmetic runs on any two reports, and "grade fell from A+ to D" across unrelated captures is a
+confident lie. Per-host drift is carried separately from fleet drift because the fleet number hides
+exactly the event this feature exists to catch — on the corpus it moves −0.3 while two hosts move ~100
+points in opposite directions.
+
 ## 5. Ownership and the parallelisation rule
 
 | Person | Stages |

@@ -695,6 +695,64 @@ class FleetPosture(JsonModel):
 
 
 @dataclass
+class HostDrift(JsonModel):
+    """How one host's posture moved between two captures. USP-10."""
+
+    host: str = ""
+    status: str = "unchanged"    #: new | removed | regressed | improved | unchanged
+    before_grade: str = ""
+    after_grade: str = ""
+    before_score: float = 0.0
+    after_score: float = 0.0
+    appeared: list[str] = field(default_factory=list)   #: rule ids now firing
+    resolved: list[str] = field(default_factory=list)   #: rule ids no longer firing
+
+    @property
+    def delta(self) -> float:
+        return round(self.after_score - self.before_score, 1)
+
+
+@dataclass
+class PostureDrift(JsonModel):
+    """The diff between two captures of the same estate. USP-10.
+
+    `comparable` is the field that matters. Two snapshots are only *drift* when
+    they cover the same infrastructure; diffing unrelated captures produces
+    arithmetic that is correct and meaningless, which is a worse failure than
+    refusing to answer. See ADR-0029.
+    """
+
+    before_capture: str = ""
+    after_capture: str = ""
+    before_sha256: str = ""
+    after_sha256: str = ""
+    before_at: datetime | None = None
+    after_at: datetime | None = None
+
+    before_grade: str = ""
+    after_grade: str = ""
+    before_score: float = 0.0
+    after_score: float = 0.0
+    direction: str = "unchanged"     #: improved | regressed | unchanged
+
+    #: Fraction of hosts present in both captures, 0.0-1.0.
+    host_overlap: float = 0.0
+    comparable: bool = False
+    #: Why not, when `comparable` is False. Empty otherwise.
+    incomparable_reason: str = ""
+
+    appeared: list[Finding] = field(default_factory=list)
+    resolved: list[Finding] = field(default_factory=list)
+    persisted_count: int = 0
+    hosts: list[HostDrift] = field(default_factory=list)
+    summary: str = ""
+
+    @property
+    def score_delta(self) -> float:
+        return round(self.after_score - self.before_score, 1)
+
+
+@dataclass
 class ActionItem(JsonModel):
     """One step in the remediation plan. Objective O02.
 

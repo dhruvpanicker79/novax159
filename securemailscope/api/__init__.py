@@ -306,6 +306,38 @@ def create_app(db_path: str | Path | None = None):
         return (jsonify(snapshot.to_dict()) if snapshot
                 else (jsonify(error="unknown snapshot"), 404))
 
+    @app.get("/api/drift")
+    @login_required
+    def drift():
+        """Diff two archived snapshots. USP-10.
+
+        Defaults to the two most recent, which is what a returning analyst
+        wants. Refuses rather than guesses when the estates do not overlap -
+        see `securemailscope/drift.py`.
+        """
+        from ..drift import compare
+
+        snapshots = store.list_snapshots()
+        if len(snapshots) < 2:
+            return jsonify(error="two completed analyses are needed for a diff",
+                           available=len(snapshots)), 409
+
+        after_id = request.args.get("after") or snapshots[0].snapshot_id
+        before_id = request.args.get("before") or snapshots[1].snapshot_id
+        by_id = {s.snapshot_id: s for s in snapshots}
+        if before_id not in by_id or after_id not in by_id:
+            return jsonify(error="unknown snapshot"), 404
+
+        payloads = {}
+        for label, snap_id in (("before", before_id), ("after", after_id)):
+            raw = store.get_report(by_id[snap_id].job_id)
+            if raw is None:
+                return jsonify(error=f"no stored report for the {label} snapshot"), 404
+            payloads[label] = Report.from_json(raw)
+
+        result = compare(payloads["before"], payloads["after"])
+        return jsonify(result.to_dict())
+
     @app.get("/api/samples")
     @login_required
     def samples():

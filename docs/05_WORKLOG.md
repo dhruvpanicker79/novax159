@@ -791,3 +791,62 @@ user credentials traverse this session, so RFC 8314 requires a validated certifi
 
 **Next:** USP-09 (attack feasibility matrix) and USP-10 (temporal drift, cheap now) are the two
 remaining items I can close without you. D16/D17 need the Colab run; USP-11 needs a DNS design decision.
+
+---
+
+## Session 10 — 2026-09-29 · temporal drift (USP-10)
+
+**What shipped.** `securemailscope/drift.py`, `fleet_later.pcap`, `GET /api/drift`, and a Posture Drift
+view. **USP-10 goes NOT BUILT → MET.** The audit reads **28 met / 5 partial / 1 not built** — only
+USP-11 is unbuilt now. ADR-0029. 247 tests pass; `scripts/evaluate.py` unchanged at precision 1.00 /
+recall 1.00.
+
+**Files.** `securemailscope/drift.py` (new), `tests/test_drift.py` (new, 16 tests), `schema/models.py`
+(`PostureDrift`, `HostDrift`) + regenerated contract, `testbed/synth.py` (two "later" scenarios),
+`securemailscope/api/__init__.py`, `api/static/app.js`, `api/templates/app.html`, `scripts/audit.py`.
+
+### The decision
+
+The diff was easy; the refusal was the work. The arithmetic runs on *any* two reports, so comparing a
+one-host capture with a fleet capture yields "grade fell from A+ to D" — which reads as a catastrophe
+and is really two unrelated files. `drift.py` computes host overlap first and refuses below 50%, with
+`comparable=False` and a stated reason, rather than producing a number that is correct and meaningless.
+The console made a softer version of this mistake two sessions ago with its KPI deltas (ADR-0026); this
+time it is enforced at the source.
+
+### The number that justifies per-host drift
+
+On the corpus the **fleet score moves −0.3**, while:
+
+```
+  10.20.1.11   regressed   A+ -> F   (-99.2)   + RC4, TLS 1.0, expired self-signed cert
+  10.20.1.16   improved    F  -> A+  (+96.1)   - RC4, TLS 1.0, expired self-signed cert
+```
+
+A tool reporting only the fleet number would have said **nothing happened** on the day a mail server was
+rebuilt with a legacy TLS profile. That is the argument for the whole feature, and it is on screen.
+
+### Found by running it
+
+**`rule_id@host:port` is not unique within a report.** `PQ-NOT-READY@10.20.1.23:993` appears twice,
+because two sessions hit that endpoint. Not a bug — the key identifies *a condition on an endpoint*,
+which is exactly the granularity a disposition needs to survive re-analysis (ADR-0022) — but it broke a
+test that assumed one finding per key. The partition is over distinct keys, and there is now a test
+asserting `drift._key` and `store.finding_key` agree, because if those ever diverge an analyst's
+decision and a drift entry stop referring to the same thing.
+
+**A `→` in the summary crashed on a Windows console.** cp1252 cannot encode U+2192, and
+`scripts/analyse.py` prints summaries. On these machines. Now ASCII, with a test that encodes the
+summary to cp1252 so it cannot come back.
+
+**The stale-server trap caught me again**, exactly as the note added to `CLAUDE.md` §8 last session
+describes: `/api/drift` returned a Flask 404 because two servers were bound to :8000 and the old one had
+never seen the route. `netstat -ano | grep :8000` before believing a restart. I wrote the note and still
+lost ten minutes to it, which suggests the note should be a habit rather than a document.
+
+**Corpus discipline held.** The two new scenarios are deliberately *not* in `SCENARIOS` — adding them
+would change `fleet.pcap` and invalidate the hand-authored ground truth in `manifest.json`.
+
+**Next:** USP-11 (DANE / MTA-STS) is the last unbuilt item, and `docs/02_USP.md` already settles the
+design question — *"if the capture contains DNS traffic"* — so it is passive extraction, not a live
+lookup. That needs DNS added to the synthetic corpus first. D16/D17/USP-04 still wait on the Colab run.

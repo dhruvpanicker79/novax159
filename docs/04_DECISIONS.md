@@ -860,3 +860,65 @@ that needs a network is a demo that fails on stage).
 **Consequence.** **O02 goes PARTIAL → MET.** USP-04 layer 3 is built; the USP stays PARTIAL only
 because layer 1 still lacks the trained model, which is blocked on the Colab run. 20 new tests, 231
 total. `scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00 — the layer touches no rule.
+
+---
+
+## ADR-0029 — Drift refuses to compare estates that are not the same estate
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Context.** USP-10 promises *"grade fell from B+ to C on 14 March — mail-03 was redeployed with a
+1024-bit key."* The data has been available since ADR-0022: a `PostureSnapshot` is archived for every
+completed job and the full report is kept alongside it, so the diff was a matter of writing it.
+
+The trap is not the diff. It is that **the arithmetic works on any two reports**. Compare a one-host
+capture with a fleet capture and you get "grade fell from A+ to D", which reads as a catastrophe and is
+really two unrelated files. The console already made a softer version of this mistake — KPI deltas
+showing "+1200% sessions" across two different PCAPs (ADR-0026) — and the fix there was to label the
+comparison. At the source, labelling is not enough.
+
+**Decision.** `securemailscope/drift.py` computes host overlap first and **refuses** when it falls below
+50%: `comparable` is False, the finding lists are left empty, and the summary says why. It also refuses
+when both sides are the same capture file, which is the other way to produce a confident zero.
+
+Fifty percent is a judgement call and is stated as one. Half the hosts in common is a re-scoped capture
+of one network; a quarter is two different networks that happen to share a subnet convention. The floor
+is a parameter so a caller with better knowledge can override it, and the test suite exercises the
+boundary in both directions.
+
+**Findings are identified by `rule_id@host:port`** — the same key dispositions use (ADR-0022), verified
+by a test, so an analyst's decision and a drift entry refer to the same thing. That key is deliberately
+**not unique within a report**: two sessions to one endpoint each produce their own finding, and
+`PQ-NOT-READY@10.20.1.23:993` legitimately appears twice in the corpus. The key identifies *a condition
+on an endpoint*, which is the right granularity for both a disposition and a drift entry, so the
+partition is over distinct keys rather than raw findings.
+
+**Per-host drift matters more than fleet drift.** On the corpus the fleet score moves **−0.3** while
+`10.20.1.11` falls 99 points (A+ → F, redeployed with RC4 and TLS 1.0) and `10.20.1.16` rises 96
+(remediated to TLS 1.3). A monitoring tool that reported only the fleet number would have said *nothing
+happened* on the day a mail server was rebuilt wrong. The summary therefore names the largest regressing
+host and the finding that caused it, because "grade fell" without a reason is not actionable.
+
+A host whose score held but whose findings changed is reported as `changed`, not `unchanged` — two
+findings swapping out at equal weight is exactly how a redeployment slips past a monitor.
+
+**The corpus.** `testbed/synth.py` gained `fleet_later.pcap`: the same eleven hosts, two of them
+changed. The new scenarios are **deliberately not in `SCENARIOS`**, because adding them would change
+`fleet.pcap` and invalidate the hand-authored ground truth in `manifest.json` — the rule from
+`CLAUDE.md` §8 about never letting the corpus drift under the evaluation.
+
+**One portability bug worth recording.** The summary used `→`. A Windows console is cp1252 and cannot
+encode U+2192, so printing a drift summary crashed — on the machines this team actually uses, from a
+script that already prints summaries. Now ASCII, with `test_summary_is_ascii_printable_on_a_windows_console`
+to keep it that way.
+
+**Consequence.** **USP-10 goes NOT BUILT → MET**; the audit reads **28 met / 5 partial / 1 not built**.
+`GET /api/drift` defaults to the two most recent snapshots and takes `?before=&after=`. The console
+gains a Posture Drift view that renders the refusal as prominently as the diff. 16 new tests, 247 total.
+`scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00 — drift touches no rule.
+
+**Rejected.** Diffing the `PostureSnapshot` rows alone (they carry counts, not findings, so the answer
+would be "grade fell" with no cause — the half of the sentence that matters). Warning instead of
+refusing on low overlap (a warning above a filled-in chart is read as a chart). Matching hosts
+fuzzily by subnet (guessing which machines are "the same" is exactly the kind of inference this tool
+does not make).

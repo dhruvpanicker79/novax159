@@ -550,6 +550,54 @@ def imaps_mid_session(port: int = 993) -> SessionScript:
     return s
 
 
+# ── the "same estate, later" pair (USP-10) ────────────────────────────────── #
+# These are deliberately NOT in SCENARIOS: adding them would change fleet.pcap
+# and invalidate the hand-authored ground truth in manifest.json. They exist
+# only to build fleet_later.pcap, which shares every host with fleet.pcap and
+# differs on exactly two of them — one fixed, one regressed. That is what makes
+# a drift diff testable rather than anecdotal.
+
+
+def imaps_16_remediated(port: int = 993) -> SessionScript:
+    """10.20.1.16, after someone did the work.
+
+    Was TLS 1.0 + RC4 with an expired self-signed certificate. Now TLS 1.3, so
+    the certificate is encrypted and correctly unobservable.
+    """
+    s = SessionScript("imaps_16_remediated", "10.20.4.17", "10.20.1.16", 49203, port)
+    s.client(client_hello("mail-compromised.test", MODERN_SUITES,
+                          [0x0304, 0x0303], [GROUP_X25519_MLKEM768, GROUP_X25519]))
+    s.server(server_hello(0x1302, 0x0303, negotiated_version=0x0304,
+                          selected_group=GROUP_X25519))
+    s.server(encrypted_application_data(280))
+    s.client(encrypted_application_data(160))
+    return s
+
+
+def smtp_11_regressed(port: int = 587) -> SessionScript:
+    """10.20.1.11, after a redeployment put a legacy TLS profile back.
+
+    Was TLS 1.3 with a hybrid post-quantum group. Now negotiates TLS 1.0 with
+    RC4 and presents the expired self-signed certificate. This is the regression
+    a monitoring tool exists to catch: nothing was attacked, someone shipped a
+    bad config.
+    """
+    s = SessionScript("smtp_11_regressed", "10.20.4.17", "10.20.1.11", 49201, port)
+    s.server("220 mail-01.dept.gov.in ESMTP Postfix\r\n")
+    s.client("EHLO client.dept.gov.in\r\n")
+    s.server("250-mail-01.dept.gov.in\r\n250-PIPELINING\r\n250-SIZE 10240000\r\n"
+             "250-STARTTLS\r\n250-ENHANCEDSTATUSCODES\r\n250 CHUNKING\r\n")
+    s.client("STARTTLS\r\n")
+    s.server("220 2.0.0 Ready to start TLS\r\n")
+    s.client(client_hello("mail-01.dept.gov.in", RC4_SUITES + MODERN_SUITES,
+                          [0x0303, 0x0301], [GROUP_SECP256R1]))
+    s.server(server_hello(0x0005, 0x0301, renegotiation_info=False))
+    s.server(certificate_message(load_cert_chain("expired_selfsigned")))
+    s.server(change_cipher_spec())
+    s.server(encrypted_application_data(220))
+    return s
+
+
 SCENARIOS = {
     "smtp_starttls_healthy": smtp_starttls_healthy,
     "smtp_starttls_stripped": smtp_starttls_stripped,
@@ -574,6 +622,15 @@ def build_all(out_dir: Path) -> list[Path]:
         written.append(write_pcap(out_dir / f"{name}.pcap", [factory()]))
     written.append(write_pcap(out_dir / "fleet.pcap",
                               [factory() for factory in SCENARIOS.values()]))
+
+    # The same estate a fortnight later: every host is still here, one was
+    # fixed and one regressed. Two captures of one network is USP-10.
+    later = {name: factory for name, factory in SCENARIOS.items()
+             if name not in ("imaps_implicit_weak", "smtp_starttls_healthy")}
+    later["imaps_16_remediated"] = imaps_16_remediated
+    later["smtp_11_regressed"] = smtp_11_regressed
+    written.append(write_pcap(out_dir / "fleet_later.pcap",
+                              [factory() for factory in later.values()]))
     return written
 
 
