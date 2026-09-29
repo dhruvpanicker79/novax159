@@ -47,6 +47,16 @@
     "executive_summary": {
       "type": "string"
     },
+    "narrative": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Narrative"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "generated_at": {
       "anyOf": [
         {
@@ -1918,6 +1928,83 @@
         },
         "summary": {
           "type": "string"
+        }
+      }
+    },
+    "Narrative": {
+      "type": "object",
+      "title": "Narrative",
+      "description": "The written half of the report. Objective O02, USP-04 layer 3.",
+      "properties": {
+        "executive_summary": {
+          "type": "string"
+        },
+        "action_plan": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionItem"
+          }
+        },
+        "closing_note": {
+          "type": "string"
+        },
+        "generated_by": {
+          "type": "string"
+        },
+        "verification": {
+          "type": "string"
+        },
+        "grounding_sha256": {
+          "type": "string"
+        }
+      }
+    },
+    "ActionItem": {
+      "type": "object",
+      "title": "ActionItem",
+      "description": "One step in the remediation plan. Objective O02.",
+      "properties": {
+        "order": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "affected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rule_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "effort": {
+          "type": "string"
+        },
+        "risk_of_change": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "config": {
+          "type": "string"
+        },
+        "standards": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }

@@ -734,3 +734,60 @@ working as intended.
 
 **Next:** real-world PCAPs are now the top corpus risk; link-layer variance is no longer part of it.
 Then the LLM layer (O02 + USP-04), USP-11 DANE/MTA-STS, and the deck.
+
+---
+
+## Session 9 — 2026-09-29 · the narrative layer, verified rather than trusted
+
+**What shipped.** `securemailscope/llm/` — grounded fact sheet, deterministic narrative generator, and a
+verifier that discards hallucinated prose. **O02 goes PARTIAL → MET**; the audit now reads **27 met /
+5 partial / 2 not built**. ADR-0028. 231 tests pass; `scripts/evaluate.py` unchanged at precision 1.00 /
+recall 1.00, because this layer touches no rule.
+
+**Files.** `llm/grounding.py`, `llm/templates.py`, `llm/verify.py`, `llm/__init__.py` (all new),
+`tests/test_llm.py` (new, 20 tests), `schema/models.py` + regenerated contract, `pipeline.py`,
+`scripts/audit.py`, `api/static/app.js` + `templates/app.html` (a Remediation view),
+`docs/03_ARCHITECTURE.md`.
+
+### The decision
+
+The obvious build — send findings to a model, print what comes back — would have broken the one property
+this project sells. Every other number traces to a rule with an RFC behind it and frame numbers a judge
+can check in Wireshark. A model's failure mode is not gibberish, it is a *plausible* host, a *plausible*
+CVE, a rule id that sounds like ours. So generated text is treated as untrusted input and checked
+mechanically against a closed vocabulary; anything unverifiable and the **whole narrative is discarded**,
+not flagged. The deterministic template was written first, ships by default, and the model is judged
+against it.
+
+**Useful for the pitch:** when a judge asks *"how do you stop it hallucinating?"*, the answer is a
+mechanical check with a test suite, not a prompt.
+
+### Bugs found by running it
+
+**The verifier rejected our own template output.** The rule pack cites "NIST SP 800-52 Rev 2"; the prose
+says "NIST SP 800-52". Exact matching failed on the prefix. A verifier that rejects correct text is one
+that gets switched off within a day, so this mattered as much as the opposite error.
+
+**Then it accepted `mail.corp.internal`.** It checked IP addresses and not DNS names — and an invented
+hostname is the most natural thing for a model to write and the easiest to believe. Caught by a
+deliberately "plausible mixture" test case that mixed one real host with one fabricated name. Both
+directions are now pinned in `test_verifier_rejects_every_kind_of_fabrication`.
+
+**The summary contradicted the plan underneath it.** It read *"14 of the 20 actions below"* above a list
+of **17**, because it counted rules while the plan merges actions that share a fix. Two rules closed by
+the same `smtpd_tls_security_level` line are one action. Fixed by building the plan first and passing
+it to the summary, with `test_summary_agrees_with_the_plan_it_introduces` to stop it drifting again.
+
+**`scripts/audit.py` was scoring this deliverable by counting lines** — `len(llm/__init__.py) > 40`.
+That is precisely the "do not claim it works without running it" failure the project has a written rule
+about, sitting inside the tool that verifies the other rules. It now calls `narrate()` and inspects the
+plan that comes back. Worth remembering: **the audit is code too, and it can lie the same way.**
+
+### Numbers
+
+30 findings collapse to **17 actions** on `fleet.pcap`. The role-aware severity justification (USP-01)
+flows into the action rationale, so the plan explains its own ordering — *"Raised from HIGH to CRITICAL:
+user credentials traverse this session, so RFC 8314 requires a validated certificate."*
+
+**Next:** USP-09 (attack feasibility matrix) and USP-10 (temporal drift, cheap now) are the two
+remaining items I can close without you. D16/D17 need the Colab run; USP-11 needs a DNS design decision.

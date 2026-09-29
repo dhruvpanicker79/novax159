@@ -22,9 +22,9 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 | | |
 |---|---|
 | Python | ~15,800 lines, plus ~2,200 of console CSS/JS/HTML |
-| Tests | **211, all passing** |
-| Docs | ~51,000 words across 12 documents, **28 ADRs** |
-| Deliverables | **26 met, 6 partial, 2 not built** — verify with `python scripts/audit.py` |
+| Tests | **231, all passing** |
+| Docs | ~52,000 words across 12 documents, **29 ADRs** |
+| Deliverables | **27 met, 5 partial, 2 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
 | Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else |
 
@@ -37,7 +37,7 @@ python -m securemailscope.api                            # the Kavach console, p
                                                          # analyst/analyst123 · admin/admin123
 python scripts/audit.py                                  # verify every deliverable
 python scripts/evaluate.py                               # measure accuracy; non-zero exit on disagreement
-for t in contract ml parsing tls certs report platform linklayer; do python tests/test_$t.py; done
+for t in contract ml parsing tls certs report platform linklayer llm; do python tests/test_$t.py; done
 ```
 
 **Eight commits are unpushed.** Git cannot push from this machine — see §5.
@@ -52,7 +52,7 @@ for t in contract ml parsing tls certs report platform linklayer; do python test
 | `docs/01_PROBLEM_STATEMENT.md` | PS decomposed into 21 deliverables (D01–D21) + O01/O02, traceability matrix |
 | `docs/02_USP.md` | The 11 USPs, with judge Q&A and slide mapping. **The PPT reference** |
 | `docs/03_ARCHITECTURE.md` | Pipeline, data model, module ownership |
-| `docs/04_DECISIONS.md` | **28 ADRs.** Every non-obvious decision, with what was rejected |
+| `docs/04_DECISIONS.md` | **29 ADRs.** Every non-obvious decision, with what was rejected |
 | `docs/05_WORKLOG.md` | Session-by-session record, including every bug found |
 | `docs/06_STATUS.md` | Verified deliverable status (`06_STATUS_GENERATED.txt` is the raw audit output) |
 | `docs/07_RELATED_WORK.md` | Seven papers reviewed; what to adopt from each |
@@ -86,6 +86,7 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 | `securemailscope/rules/` | S6 | 34 rules, each with standards citations and config snippets |
 | `securemailscope/features/` | S7 | 51-field feature vector |
 | `securemailscope/ml/` | S8 | Classifier, anomaly, priority, corpus generator, training |
+| `securemailscope/llm/` | S8 | **Grounded narrative + hallucination verifier** (ADR-0028). Deterministic by default |
 | `securemailscope/report/` | S10 | JSON + single self-contained HTML |
 | `securemailscope/store.py` | — | stdlib `sqlite3`, five tables, no ORM |
 | `securemailscope/siem.py` | — | CEF and ECS export |
@@ -115,6 +116,11 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 
 **Analyst feedback loop:** `DispositionState.FALSE_POSITIVE` is served at `/api/training-signal` as a labelled
 example, so triage work becomes supervised signal rather than evaporating.
+
+**Grounded narrative (ADR-0028):** the LLM layer is *verified, not trusted*. Generated prose is checked against
+a closed vocabulary drawn from the report, and anything naming a host, rule, RFC or CVE that is not in the facts
+is discarded whole. The deterministic template ships by default, so the demo never needs a network. Say this
+when a judge asks "how do you stop it hallucinating?" — the answer is a mechanical check, not a prompt.
 
 ---
 
@@ -149,9 +155,10 @@ example, so triage work becomes supervised signal rather than evaporating.
 1. **No trained model.** `notebooks/train_models.ipynb` is ready; run it in Colab with `data/corpus.csv` and
    drop the output into `models/`. → **D16 and D17 go PARTIAL → MET.** Bar to beat: baseline MAE **0.1683**;
    if the model loses, the notebook says so and the baseline ships.
-2. **`securemailscope/llm/` is a stub** — USP-04 layer 3. O02 is otherwise complete. Follow the Dynamic Metric
-   Engine pattern (`docs/07_RELATED_WORK.md` §3): the model may emit narrative and config text only, never
-   introduce, remove or re-score a finding.
+2. ~~**`securemailscope/llm/` is a stub.**~~ **Done (ADR-0028). O02 is MET.** Grounded fact sheet,
+   deterministic template that ships by default, and a verifier that discards any generated prose naming a
+   host, rule, RFC or CVE not in the facts. USP-04 stays PARTIAL only because **layer 1 needs the trained
+   model** — run Colab and it flips to MET.
 3. **USP-09 attack feasibility matrix** — `Finding.related_attacks` exists; needs feasibility verdicts and a panel.
 4. **USP-11 DANE / MTA-STS** — the highest-value unbuilt feature, see §7.
 5. **USP-10 temporal drift** — now cheap: `PostureSnapshot` already archives every run, so two snapshots are a diff.

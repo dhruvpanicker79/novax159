@@ -261,14 +261,19 @@ def deliverables(report: Report) -> list[Check]:
     with_fix = [f for f in findings if f.remediation and f.remediation.summary]
     with_snippet = [f for f in with_fix if f.remediation.postfix or
                     f.remediation.dovecot or f.remediation.exchange]
-    llm_path = ROOT / "securemailscope" / "llm" / "__init__.py"
-    llm_built = len(llm_path.read_text(encoding="utf-8").splitlines()) > 40
+    # Counting lines in llm/__init__.py proved nothing — call the thing.
+    narrative = report.narrative
+    plan = narrative.action_plan if narrative else []
+    grounded = bool(narrative and narrative.grounding_sha256)
     add("O02", "Mitigation recommendations",
-        PARTIAL if with_fix and not llm_built else (MET if llm_built else MISSING),
+        MET if (with_fix and plan and grounded) else
+        (PARTIAL if with_fix else MISSING),
         f"{len(with_fix)}/{len(findings)} findings carry remediation, "
-        f"{len(with_snippet)} with config snippets. The LLM narrative layer "
-        f"(USP-04 layer 3) is NOT built",
-        "rules/pack.py")
+        f"{len(with_snippet)} with config snippets. Narrative layer produced "
+        f"{len(plan)} deduplicated actions from {len(findings)} findings "
+        f"via '{narrative.generated_by if narrative else 'nothing'}', grounded on "
+        f"fact sheet {narrative.grounding_sha256[:12] if narrative else '-'}",
+        "rules/pack.py + llm/")
 
     return checks
 
@@ -322,13 +327,19 @@ def usps(report: Report) -> list[Check]:
     scored = [s for s in report.sessions if s.assessment]
     layer1 = bool(scored and any(s.assessment.shap_contributions for s in scored))
     layer2 = bool(scored and any(s.assessment.anomaly_score for s in scored))
-    llm_path = ROOT / "securemailscope" / "llm" / "__init__.py"
-    layer3 = len(llm_path.read_text(encoding="utf-8").splitlines()) > 40
+    narrative = report.narrative
+    layer3 = bool(narrative and narrative.action_plan and narrative.executive_summary)
+    trained = any(s.assessment and str(s.assessment.model_version).startswith("gradient")
+                  for s in report.sessions)
     add("USP-04", "Three-layer explainable AI",
-        PARTIAL,
-        f"layer 1 risk+explanation: yes (baseline backend; trained model blocked). "
+        MET if (layer1 and layer2 and layer3 and trained) else PARTIAL,
+        f"layer 1 risk+explanation: {'yes' if layer1 else 'no'} "
+        f"({'trained model' if trained else 'baseline backend; trained model blocked'}). "
         f"layer 2 anomaly: {'yes' if layer2 else 'no'} (peer deviation + JA3 rarity; "
-        f"Isolation Forest blocked). layer 3 LLM remediation: NOT BUILT")
+        f"Isolation Forest blocked). "
+        f"layer 3 grounded narrative: {'yes' if layer3 else 'NO'} "
+        f"({len(narrative.action_plan) if narrative else 0} actions, "
+        f"verification '{narrative.verification if narrative else '-'}')")
 
     # USP-05
     pq_sessions = [s for s in report.sessions

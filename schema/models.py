@@ -695,6 +695,50 @@ class FleetPosture(JsonModel):
 
 
 @dataclass
+class ActionItem(JsonModel):
+    """One step in the remediation plan. Objective O02.
+
+    An action is **not** a finding. Thirteen sessions with the same weak cipher
+    are thirteen findings and one action, because an admin fixes it once. The
+    plan is what someone actually works through on a Monday morning.
+    """
+
+    order: int = 0
+    title: str = ""
+    rationale: str = ""              #: why this one, and why now
+    severity: Severity = Severity.INFO
+    affected: list[str] = field(default_factory=list)    #: "host:port"
+    rule_ids: list[str] = field(default_factory=list)    #: what it closes
+    effort: str = "unknown"
+    risk_of_change: str = "unknown"
+    platform: str = "generic"        #: postfix | dovecot | exchange | generic
+    config: str = ""                 #: the snippet to paste
+    standards: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Narrative(JsonModel):
+    """The written half of the report. Objective O02, USP-04 layer 3.
+
+    `generated_by` and `verification` are not decoration. A narrative that
+    cannot say where it came from, or that was silently rewritten by a model,
+    is not evidence — and this tool's whole claim is that its output is
+    checkable. See ADR-0028.
+    """
+
+    executive_summary: str = ""
+    action_plan: list[ActionItem] = field(default_factory=list)
+    closing_note: str = ""
+    #: "template" or "llm:<model>". Never blank on a generated narrative.
+    generated_by: str = "template"
+    #: "not attempted" | "passed" | a reason the model output was rejected.
+    verification: str = "not attempted"
+    #: SHA-256 of the fact sheet the text was generated from, so the claim
+    #: "this narrative describes that report" can be checked rather than trusted.
+    grounding_sha256: str = ""
+
+
+@dataclass
 class Report(JsonModel):
     """Top-level export. Deliverable D20, consumed by the dashboard (D21).
 
@@ -710,6 +754,8 @@ class Report(JsonModel):
     #: D18 -- the ranked triage queue, most urgent first.
     prioritised_findings: list[Finding] = field(default_factory=list)
     executive_summary: str = ""
+    #: O02 / USP-04 layer 3 - the written remediation plan.
+    narrative: Narrative | None = None
     generated_at: datetime | None = None
     #: USP-07: accuracy numbers from the ground-truth testbed, when available.
     evaluation_metrics: dict[str, float] = field(default_factory=dict)

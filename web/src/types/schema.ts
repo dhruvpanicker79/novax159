@@ -17,6 +17,21 @@ export type SignatureAlgorithm = "md5WithRSA" | "sha1WithRSA" | "sha256WithRSA" 
 export type TlsMode = "implicit" | "starttls" | "cleartext" | "unknown";
 export type TlsVersion = "ssl2" | "ssl3" | "tls1.0" | "tls1.1" | "tls1.2" | "tls1.3" | "unknown";
 
+/** One step in the remediation plan. Objective O02. */
+export interface ActionItem {
+  order: number;
+  title: string;
+  rationale: string;
+  severity: Severity;
+  affected: string[];
+  rule_ids: string[];
+  effort: string;
+  risk_of_change: string;
+  platform: string;
+  config: string;
+  standards: string[];
+}
+
 /** Signals that an attack has ALREADY happened, not merely that it could. */
 export interface AttackEvidence {
   starttls_stripping_suspected: boolean;
@@ -280,6 +295,16 @@ export interface MailSession {
   evidence: Evidence;
 }
 
+/** The written half of the report. Objective O02, USP-04 layer 3. */
+export interface Narrative {
+  executive_summary: string;
+  action_plan: ActionItem[];
+  closing_note: string;
+  generated_by: string;
+  verification: string;
+  grounding_sha256: string;
+}
+
 /** A segment of the session's lifetime. Stages S3/S4. Deliverable D02/D03. */
 export interface Phase {
   kind: PhaseKind;
@@ -312,6 +337,7 @@ export interface Report {
   fleet: FleetPosture | null;
   prioritised_findings: Finding[];
   executive_summary: string;
+  narrative: Narrative | null;
   generated_at: string | null;
   evaluation_metrics: Record<string, number>;
 }

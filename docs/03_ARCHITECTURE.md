@@ -104,7 +104,7 @@ securemailscope/
   rules/        S6       YAML rule pack + role-aware severity engine
   features/     S7       feature extraction
   ml/           S8       classifier, anomaly detector, SHAP
-  llm/          S8       grounded remediation generation (+ template fallback)
+  llm/          S8       grounded narrative: fact sheet, template, verifier (ADR-0028)
   scoring/      S9       posture scoring, grading, prioritisation
   report/       S10      JSON / HTML / PDF, four persona templates
   api/          S10      Flask service + SOC console (auth, templates, static)
@@ -126,6 +126,24 @@ indistinguishable from a healthy estate. When the decode rate collapses the pipe
 
 `decoded_frame_count` counts frames whose **link layer** parsed, ARP and other non-IP traffic included.
 Counting only IP-bearing frames reports an ARP-only capture as unreadable, which it is not.
+
+### The narrative layer (ADR-0028)
+
+`llm/` is handed a **finished** `Report` and returns only a `Narrative`. It cannot add, remove or
+re-score a finding — the boundary is structural, not a convention. Three files:
+
+| File | Job |
+|---|---|
+| `grounding.py` | Extracts a `FactSheet`: counts, rule ids, severities, remediation text. No capture bytes, no credentials, no banners. Hashed, and the hash travels on the narrative |
+| `templates.py` | The deterministic generator. **This is what ships** — no network, no model, no key |
+| `verify.py` | Checks generated prose against the fact sheet's closed vocabulary. Anything unverifiable and the whole narrative is discarded |
+
+`Report.narrative` carries `generated_by`, `verification` and `grounding_sha256`, so a reader can check
+that the text describes that report rather than being asked to trust it.
+
+**The plan is not the finding list.** Actions are merged by `(remediation summary, config snippet)`:
+thirteen sessions with one weak cipher is one action, and two rules closed by the same config line is
+one action. 30 findings become 17 actions on the corpus.
 
 ## 5. Ownership and the parallelisation rule
 

@@ -196,7 +196,7 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
     hosts = _roll_up_hosts(sessions)
     fleet = _roll_up_fleet(sessions, hosts, all_findings)
 
-    return Report(
+    report = Report(
         capture=capture,
         sessions=sessions,
         hosts=hosts,
@@ -205,6 +205,14 @@ def analyse(pcap_path: str | Path, model_dir: str | Path = "models",
         executive_summary=fleet.summary,
         generated_at=datetime.now(tz=timezone.utc),
     )
+
+    # S8 layer 3 (O02, USP-04). Deterministic by default: no network, no model,
+    # no API key. It writes *about* the rule engine's output and is structurally
+    # unable to change it - it is handed the finished report, and only the
+    # `narrative` field of that report comes back.
+    from .llm import narrate
+    report.narrative = narrate(report)
+    return report
 
 
 # --------------------------------------------------------------------------- #

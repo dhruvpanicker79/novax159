@@ -49,7 +49,7 @@ The last partial is D20's PDF, which needs Playwright and is already covered by 
       figure means nothing. Disagreements between the hand-derived truth and the actual output are the entire
       point: that is where the number comes from.
 
-- [ ] **LLM remediation layer** (`securemailscope/llm/`) → closes **O02 + USP-04**.
+- [x] **LLM remediation layer** (`securemailscope/llm/`) → **closes O02.**
       Follow the Dynamic Metric Engine pattern from Unal & Celiktas (`docs/07_RELATED_WORK.md` §3): the model
       consumes structured findings and emits narrative and config text only. It may **never** introduce, remove or
       re-score a finding. Deterministic template fallback so a demo cannot die on an API timeout.

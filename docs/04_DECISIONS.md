@@ -786,3 +786,77 @@ is what the old code did, and is the entire reason this ADR exists.
 **Consequence.** 11 new tests in `tests/test_linklayer.py`. All seven encapsulations now produce
 **13 sessions, 30 findings, grade D** — identical to the Ethernet baseline. `scripts/audit.py` unchanged
 at 26 / 6 / 2; `scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00.
+
+---
+
+## ADR-0028 — The narrative layer is verified, not trusted
+
+**Date:** 2026-09-29 · **Status:** Accepted
+
+**Context.** O02 asks for mitigation recommendations and USP-04 claims three explainable-AI layers, of
+which the third — a language model turning findings into prose — was a stub. The obvious build is: send
+the findings to a model, print what comes back.
+
+That would have destroyed the thing this project actually sells. Every other number in the report traces
+to a deterministic rule with an RFC citation behind it, and every finding carries frame numbers a judge
+can type into Wireshark. A model breaks that by construction: it emits fluent text whose relationship to
+the input is unverified, and its failure mode is not gibberish but a *plausible* host, a *plausible*
+CVE, a rule identifier that sounds exactly like one of ours. **In a security report, a confident
+invented fact is worse than no report at all.**
+
+**Decision — four parts.**
+
+**1. Grounded.** `llm/grounding.py` builds a `FactSheet`: counts, rule identifiers, severities, and the
+remediation text the rule pack already wrote. Never capture bytes, credentials, banners or payloads. The
+model cannot leak what it was never shown, which is cheaper and more reliable than redaction. The sheet
+is hashed and the hash travels on the narrative, so *"this text describes that report"* is checkable
+rather than asserted.
+
+**2. Verified.** `llm/verify.py` treats generated prose as untrusted input and checks it against the
+sheet's closed vocabulary — every IP address, hostname, rule identifier, RFC, NIST reference and CVE
+must already appear in the facts, and severity claims must not contradict the counts. **Anything
+unverifiable and the entire narrative is discarded**, not flagged and not repaired. A partially
+hallucinated security report is not a degraded report, it is an untrustworthy one, and the deterministic
+path is always available and always correct.
+
+**3. Deterministic by default.** `llm/templates.py` produces the full narrative — executive summary,
+action plan, scope note — with no network, no model and no API key. **It was written first and it is
+what ships**; the model is an optional improvement judged against it. Writing the fallback second is how
+projects end up with a fallback nobody would want to read. `SMS_LLM_BACKEND` is unset by default, so the
+demo path never makes a call and cannot die on a timeout.
+
+**4. Structurally unable to analyse.** `narrate()` is handed a *finished* `Report` and only the
+`narrative` field comes back. It cannot add, remove or re-score a finding, and
+`test_the_layer_cannot_change_the_analysis` asserts the findings and fleet grade are byte-identical
+before and after. That boundary is what keeps the AI story defensible under questioning.
+
+**The plan is not the finding list.** Thirteen sessions with one weak cipher is one action, and two
+rules closed by the same config line is one action. 30 findings collapse to 17 actions on the corpus. A
+plan that repeats itself is a plan nobody finishes, and listing the same `smtpd_tls_security_level`
+change twice makes the tool look like it cannot count.
+
+**Two bugs the guardrail found in itself.** The first version rejected *our own template output*,
+because the rule pack cites "NIST SP 800-52 Rev 2" and the prose says "NIST SP 800-52" — fixed with
+prefix matching in both directions. The second **accepted `mail.corp.internal`**, because it checked IP
+addresses and not DNS names, which is the most natural thing for a model to invent and the easiest to
+believe. A verifier that rejects correct text gets switched off; one that accepts fabrications is
+decoration. Both cases are now in `test_verifier_rejects_every_kind_of_fabrication`.
+
+**The audit was changed too.** It previously scored this deliverable by counting lines in
+`llm/__init__.py` — `len(...) > 40`. That is exactly the "do not claim it works without running it"
+failure the project has a rule about, sitting inside the tool that verifies the other rules. It now
+calls `narrate()` and checks the plan it gets back.
+
+**Contract change.** `ActionItem` and `Narrative` added to `schema/models.py`; `Report.narrative`.
+Provenance (`generated_by`, `verification`, `grounding_sha256`) is part of the contract, not a log line,
+because a narrative that cannot say where it came from is not evidence. Regenerated
+`schema/generated/` and `web/src/types/schema.ts`; `docs/03_ARCHITECTURE.md` updated in the same commit.
+
+**Rejected.** Letting the model write the action plan (it would then be inventing remediation, which is
+the one place a wrong answer breaks production). Retrying or repairing rejected output (a model talked
+into passing a verifier has learned to pass the verifier). Shipping the model path by default (a demo
+that needs a network is a demo that fails on stage).
+
+**Consequence.** **O02 goes PARTIAL → MET.** USP-04 layer 3 is built; the USP stays PARTIAL only
+because layer 1 still lacks the trained model, which is blocked on the Colab run. 20 new tests, 231
+total. `scripts/evaluate.py` unchanged at precision 1.00 / recall 1.00 — the layer touches no rule.
