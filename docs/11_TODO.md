@@ -20,7 +20,10 @@ Nothing in the repo can move these.
       USP-02. Replace with `Downgrade evidence present? → classify attack evidence`. Also drop
       `MAIL STREAM CAPTURE` — live capture is out of scope.
 - [ ] **Settle the name.** `docs/10_RESEARCH_PAPER.md` says *CyberKavach*; code, README, slides and every other
-      doc say *SecureMailScope*. Every hour this stays open is another place to change.
+      doc say *SecureMailScope*; the console wordmark says *Kavach*. Every hour this stays open is another
+      place to change. **The UI half is now one line** — `app.config["BRAND"]` in
+      `securemailscope/api/__init__.py`, or `SMS_BRAND` in the environment (ADR-0026). The docs and slides
+      are still a find-and-replace.
 
 ---
 
@@ -109,6 +112,11 @@ Build order matters — each item depends on the one above.
       session and the disposition survived.
 - [ ] **Look at the *offline HTML report* in a real browser.** Still verified structurally only. It is a
       separate renderer from the console and nobody has seen it.
+- [ ] **Decide the grading curve.** `smtp_relay_cleartext.pcap` scores **95/100 = A+**. The relay finding is
+      correctly downgraded to LOW under USP-01 (RFC 7435, opportunistic relay), and `evaluate.py` agrees with
+      ground truth — but A+ is the *top* grade for a server sending mail in plaintext, which is a one-line
+      attack from a judge. The finding is reported; the curve is the question. Lives in `pipeline.py`;
+      re-run `scripts/evaluate.py` after any change.
 
 ---
 

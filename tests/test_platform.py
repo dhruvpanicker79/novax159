@@ -356,9 +356,9 @@ def test_console_is_served_and_self_contained():
     body = client.get("/").get_data(as_text=True)
     assert body.lstrip().lower().startswith("<!doctype html>")
 
-    for view in ("#overview", "#captures", "#sessions", "#findings",
-                 "#certificates", "#compliance", "#audit", "#snapshots",
-                 "#settings"):
+    for view in ("#overview", "#captures", "#sessions", "#findings", "#exposure",
+                 "#certificates", "#infrastructure", "#compliance", "#audit",
+                 "#reports", "#settings"):
         assert view in body, view
 
     assets = re.findall(r'(?:href|src)="([^"]+)"', body)

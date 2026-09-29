@@ -654,3 +654,65 @@ the bundled-capture dropdown, 13 sessions and 30 findings at grade D, opened a s
 drawer, acknowledged a finding and confirmed the disposition and its audit event persisted with actor `admin`,
 finalised a snapshot, exported CEF and ECS, and restarted the service to confirm the session and the disposition
 both survived.
+
+---
+
+## ADR-0026 — The Kavach console: crimson operations UI, and no geographic threat map
+
+**Date:** 2026-09-29 · **Status:** Accepted (supersedes the visual half of ADR-0025)
+
+**Context.** ADR-0025 built a nine-view console on a cyan-on-black palette. A reference design was then
+supplied — dark crimson, a split login with a photographic panel, a search-led topbar, KPI cards with
+sparklines and percentage deltas, and a tabbed session-detail page. The information architecture from
+ADR-0025 survives; the visual language and two of the views do not.
+
+**Decision.** Rebuilt `static/app.css`, `static/app.js`, `templates/login.html` and `templates/app.html`
+against that design. Crimson `#dc2626` on `#0a0a0c`, twelve views, a global `Ctrl-K` search across
+sessions, findings and certificates, and the session drawer replaced by a full detail page with
+Overview / Handshake / Certificates / Evidence / Remediation tabs.
+
+**The reference showed a geographic threat map. We did not build one, and the refusal is the decision.**
+It listed countries — Russia, China, Iran, North Korea — with IP counts and finding totals. We cannot
+produce that honestly:
+
+- Every host in the corpus is RFC 1918 private space. `10.20.1.23` has no country. Neither will most
+  hosts in any *internal* mail capture, which is the use case the problem statement describes.
+- No GeoIP database ships with this tool, and adding one means a dependency plus a licensed data file
+  on machines where seven compiled packages are already blocked (§5 of `CLAUDE.md`).
+- The tool's entire claim is that **every finding is verifiable against the PCAP** (ADR-0004). A world
+  map with countries on it would be the one panel on screen that a judge could not verify — and the
+  first one they would test.
+
+Fabricating attribution to make a panel look impressive is the exact failure this project has avoided
+everywhere else. **Replaced with an Exposure Map**: the real observed topology, three lanes for the
+three port roles, one node per server endpoint, radius by session count, colour by worst finding,
+dashed ring for anything that carried cleartext. It occupies the same visual space and it doubles as
+the clearest statement of USP-01 — the lanes *are* the severity policy.
+
+**Two smaller honesty calls in the same build.**
+
+*Protocol distribution does not use the severity ramp.* Colouring IMAP orange and POP3 yellow implies
+IMAP is more dangerous, when it only means there are more IMAP sessions. Colour means severity
+everywhere in this console, so the protocol donut uses a neutral red-to-grey ramp instead.
+
+*KPI deltas say what they are measured against.* Comparing two `PostureSnapshot`s is genuine drift
+only when they cover the same estate. Across unrelated captures the arithmetic is correct and the
+meaning is not — a 1-session capture followed by a 13-session one reads as "+1200%". Each card now
+prints `vs previous capture (N)` beneath it, and switches from a percentage to an absolute difference
+past ±999%. With one snapshot it says *no prior capture to compare* rather than showing a flat 0%.
+
+**The brand is a setting, not a string.** The reference wordmark says *Kavach*; the code says
+*SecureMailScope*; `docs/10_RESEARCH_PAPER.md` says *CyberKavach*. That conflict is still unresolved
+(`docs/11_TODO.md` §A), so `app.config["BRAND"]` holds it, a context processor injects it, and the
+templates interpolate it. Settling the name is now one line, or `SMS_BRAND` in the environment.
+
+**Consequence.** `test_console_is_served_and_self_contained` was updated to the new eleven-view nav and
+still asserts the offline guarantee — every `href`/`src` resolves to this service, and the served CSS
+and JS contain no `http://`, `https://`, `//cdn` or `@import url(`. All charts remain hand-drawn SVG.
+201 tests pass, `scripts/audit.py` is unchanged at 26 met / 6 partial / 2 not built, and
+`scripts/evaluate.py` still reports precision 1.00 / recall 1.00.
+
+**Verified by driving it**: signed in, ran two bundled captures, confirmed the KPI delta path with two
+real snapshots, opened all five session tabs, exercised the global search, acknowledged a finding,
+finalised as admin and was refused as analyst, and repeated the whole sequence against an empty
+database.

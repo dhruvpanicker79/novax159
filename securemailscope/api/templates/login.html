@@ -3,43 +3,168 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · SecureMailScope</title>
+<title>Sign in · {{ brand }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l8 4v6c0 5-3.4 9.3-8 10-4.6-.7-8-5-8-10V6l8-4z' fill='%2322d3ee'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l8 4v6c0 5-3.4 9.3-8 10-4.6-.7-8-5-8-10V6l8-4z' fill='%23dc2626'/%3E%3C/svg%3E">
 </head>
 <body>
-<div class="login-wrap">
-  <form class="login-card" method="post" action="/login" autocomplete="on">
-    <div class="login-brand">
-      <svg class="mark" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2l8 4v6c0 5-3.4 9.3-8 10-4.6-.7-8-5-8-10V6l8-4z"
-              stroke="#22d3ee" stroke-width="1.6" stroke-linejoin="round"/>
-        <path d="M8.6 11.4h6.8v4.2H8.6zM10.2 11.4V9.6a1.8 1.8 0 013.6 0v1.8"
-              stroke="#22d3ee" stroke-width="1.4" stroke-linejoin="round"/>
-      </svg>
-      <h1>SecureMailScope</h1>
-    </div>
-    <p class="login-sub">Passive cryptographic posture assessment for email infrastructure.</p>
+<div class="auth">
 
-    {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+  <!-- Left panel. Every mark here is generated: an SVG filter for the grain and
+       plain geometry for the rest, because a photograph would mean an external
+       asset and the console has to work with no network at all (ADR-0018). -->
+  <section class="auth-art">
+    <svg class="bg" viewBox="0 0 800 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <filter id="grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" seed="7"/>
+          <feColorMatrix type="saturate" values="0"/>
+        </filter>
+        <radialGradient id="glow" cx="50%" cy="38%" r="50%">
+          <stop offset="0%" stop-color="#dc2626" stop-opacity=".16"/>
+          <stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="beam" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#dc2626" stop-opacity=".5"/>
+          <stop offset="100%" stop-color="#dc2626" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
 
-    <div class="field">
-      <label for="u">Username</label>
-      <input id="u" name="username" autocomplete="username" autofocus required
-             spellcheck="false" placeholder="analyst">
-    </div>
-    <div class="field">
-      <label for="p">Password</label>
-      <input id="p" name="password" type="password" autocomplete="current-password" required
-             placeholder="••••••••">
-    </div>
-    <button class="btn-primary" type="submit">Sign in</button>
+      <rect width="800" height="1000" fill="#0c0c0f"/>
+      <rect width="800" height="1000" fill="url(#glow)"/>
 
-    <div class="login-hint">
-      demo &nbsp;analyst / analyst123 &nbsp;·&nbsp; triage<br>
-      demo &nbsp;admin&nbsp;&nbsp; / admin123 &nbsp;&nbsp;·&nbsp; triage + sign-off
+      <!-- terrain: stacked ridgelines, the horizon a listening post sits on -->
+      <g fill="none" stroke="#1e1e24" stroke-width="1">
+        <path d="M0 720 Q 120 664 240 700 T 480 676 T 800 716"/>
+        <path d="M0 754 Q 150 700 300 738 T 600 706 T 800 748"/>
+        <path d="M0 792 Q 130 742 260 776 T 520 748 T 800 786"/>
+        <path d="M0 832 Q 170 784 340 816 T 660 790 T 800 824"/>
+        <path d="M0 876 Q 140 830 280 862 T 560 836 T 800 870"/>
+      </g>
+
+      <!-- concentric sweep, centred on the dish -->
+      <g fill="none" stroke="#dc2626" stroke-opacity=".13">
+        <circle cx="330" cy="400" r="120"/><circle cx="330" cy="400" r="200"/>
+        <circle cx="330" cy="400" r="290"/><circle cx="330" cy="400" r="395"/>
+        <circle cx="330" cy="400" r="510"/>
+      </g>
+      <path d="M330 400 L330 10 A390 390 0 0 1 606 124 Z" fill="url(#beam)" opacity=".5"/>
+
+      <!-- the dish itself -->
+      <g stroke="#3a3a44" fill="none" stroke-width="2.5" stroke-linecap="round">
+        <path d="M330 400 m-104 -34 a112 112 0 1 1 168 96" stroke-width="7" stroke="#26262e"/>
+        <path d="M330 400 m-104 -34 a112 112 0 1 1 168 96"/>
+        <path d="M330 400 L330 476"/>
+        <path d="M296 476 L364 476"/>
+        <path d="M330 400 L372 356"/>
+        <circle cx="372" cy="356" r="9" fill="#15151a"/>
+        <path d="M282 504 L330 476 L378 504 L378 540 L282 540 Z" fill="#101014" stroke="#26262e"/>
+      </g>
+
+      <!-- a second, smaller array further back -->
+      <g stroke="#1f1f26" fill="none" stroke-width="2" opacity=".8">
+        <path d="M600 520 m-56 -18 a60 60 0 1 1 90 52"/>
+        <path d="M600 520 L600 562"/><path d="M578 562 L622 562"/>
+      </g>
+
+      <!-- scanlines + grain, which is what stops it reading as a vector drawing -->
+      <g stroke="#ffffff" stroke-opacity=".012">
+        <path d="M0 0 H800 M0 4 H800 M0 8 H800 M0 12 H800 M0 16 H800" stroke-width="1"
+              transform="scale(1,62.5)"/>
+      </g>
+      <rect width="800" height="1000" filter="url(#grain)" opacity=".16"
+            style="mix-blend-mode:overlay"/>
+    </svg>
+
+    <div class="auth-meta"><span>NTRO</span><span>SIH 2026</span></div>
+
+    <div class="wordmark"><i class="bar"></i>{{ brand }}</div>
+
+    <div class="auth-tag">
+      Passive analysis.<br>
+      Evidence-driven insights.<br>
+      Secure email infrastructure.
+      <hr>
     </div>
-  </form>
+
+    <p class="quote">"From network traffic to cryptographic intelligence."</p>
+  </section>
+
+  <!-- Right panel: the form -->
+  <section class="auth-form">
+    <form class="auth-box" method="post" action="/login" autocomplete="on">
+      <h2>Welcome to</h2>
+      <h1>{{ brand }}</h1>
+      <p class="sub">Cryptographic security assessment for email infrastructure.</p>
+
+      {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
+
+      <div class="field">
+        <label for="u">Username</label>
+        <div class="wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <input id="u" name="username" autocomplete="username" autofocus required
+                 spellcheck="false" placeholder="analyst">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="p">Password</label>
+        <div class="wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>
+          <input id="p" name="password" type="password" autocomplete="current-password" required
+                 placeholder="••••••••">
+          <button class="peek" type="button" id="peek" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" id="peekIcon">
+              <path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12z"/>
+              <circle cx="12" cy="12" r="3.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn-primary" type="submit">
+        Sign In
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6l6 6-6 6"/></svg>
+      </button>
+
+      <div class="auth-row">
+        <label><input type="checkbox" name="remember" value="1"> Remember me</label>
+        <a href="#" id="forgot">Forgot password?</a>
+      </div>
+
+      <div class="auth-hint">
+        demo &nbsp;analyst / analyst123 &nbsp;·&nbsp; triage<br>
+        demo &nbsp;admin&nbsp;&nbsp; / admin123 &nbsp;&nbsp;·&nbsp; triage + sign-off
+      </div>
+    </form>
+  </section>
 </div>
+
+<script>
+  document.getElementById('peek').onclick = function () {
+    var i = document.getElementById('p');
+    i.type = i.type === 'password' ? 'text' : 'password';
+    this.setAttribute('aria-label', i.type === 'password' ? 'Show password' : 'Hide password');
+    i.focus();
+  };
+  /* There is no reset flow and pretending otherwise would be worse than saying so. */
+  document.getElementById('forgot').onclick = function (e) {
+    e.preventDefault();
+    var box = document.querySelector('.auth-error') || (function () {
+      var d = document.createElement('div');
+      d.className = 'auth-error';
+      document.querySelector('.auth-box .sub').after(d);
+      return d;
+    })();
+    box.textContent = 'No reset flow in this build — the demo accounts are seeded on first run '
+                    + 'and listed below.';
+  };
+</script>
 </body>
 </html>

@@ -82,6 +82,16 @@ def create_app(db_path: str | Path | None = None):
         if not secret_file.exists():
             secret_file.write_text(secrets.token_hex(32))
         app.secret_key = secret_file.read_text().strip()
+    # The console's wordmark, in one place. The project name is still unsettled
+    # (docs/10_RESEARCH_PAPER.md says CyberKavach, the code says SecureMailScope,
+    # the UI mock says Kavach), so it is a setting rather than a string typed into
+    # four templates. Settling it is one line here or one environment variable.
+    app.config["BRAND"] = os.environ.get("SMS_BRAND", "Kavach")
+
+    @app.context_processor
+    def _brand():
+        return {"brand": app.config["BRAND"]}
+
     app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                       # Off by default outside debug, which means an edit to a
                       # template is invisible until the process restarts. Six

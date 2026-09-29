@@ -610,3 +610,68 @@ justification. USP-01, USP-04 and ADR-0014, on screen.
 
 **Next:** unchanged — real-world PCAPs, link-layer coverage (IPv6/VLAN/SLL), and the Colab training run. None of
 them are UI work, which is the right place to be.
+
+---
+
+## Session 7 — 2026-09-29 · the Kavach console
+
+**What changed.** The console was rebuilt against a supplied reference design: crimson on near-black,
+a split login, a search-led topbar, KPI cards with sparklines and deltas, and a tabbed session-detail
+page in place of the drawer. Twelve views. ADR-0026. 201 tests still pass; `scripts/audit.py` is
+unchanged at **26 / 6 / 2** and `scripts/evaluate.py` still reports precision 1.00, recall 1.00 — the
+point of running both before and after a change that touched no analysis code.
+
+**Files.** `static/app.css` and `static/app.js` rewritten, `templates/login.html` and
+`templates/app.html` rewritten, `securemailscope/api/__init__.py` (brand setting + context processor),
+`tests/test_platform.py` (nav list updated).
+
+### The decision worth remembering
+
+**The reference had a geographic threat map. We refused to build it.** It showed countries with IP
+counts and finding totals. Every host in the corpus is RFC 1918 — `10.20.1.23` has no country — no
+GeoIP database ships with the tool, and the project's whole claim is that any finding can be checked
+against the PCAP. That map would have been the only panel on screen a judge could not verify, and the
+first one they would test. Replaced with an **Exposure Map** of the real observed topology, laid out
+in three lanes by port role, which occupies the same space and happens to be the clearest single
+picture of USP-01. Written up as ADR-0026 because the refusal, not the replacement, is the decision.
+
+### Bugs found by running it
+
+**Wrong schema field names, three of them.** The session panel read `s.client_port` and
+`s.flow.byte_count`; the contract has `flow.src_port`, `flow.c2s_bytes` and `flow.s2c_bytes`. They
+rendered as an em dash rather than throwing, which is exactly how this kind of thing survives a code
+read. Found by looking at the page. The fix also surfaced `stream_id`, duration, retransmission count
+and gap state, which were in the contract and unused.
+
+**A percentage that was true and misleading.** The KPI deltas compared the two most recent
+`PostureSnapshot`s. Running a 1-session capture and then a 13-session one produced "+1200% sessions",
+which reads as estate growth and is really two different PCAPs. Cards now print `vs previous capture
+(N)` under the figure and switch to an absolute difference past ±999%.
+
+**Severity colours borrowed for something that is not severity.** The protocol donut used the severity
+ramp, so IMAP came out orange and POP3 yellow — implying danger where the only fact is volume. Neutral
+ramp now. Colour means one thing in this console.
+
+**Two servers on one port, and half an hour of chasing a ghost.** The brand wordmark rendered empty
+after the change. The running process was an *older* server that had never registered the context
+processor; because `TEMPLATES_AUTO_RELOAD` is on it happily re-read the new template with `{{ brand }}`
+in it and rendered nothing. A second `python -m securemailscope.api` had failed to bind and exited,
+leaving the stale one serving. **Check `netstat -ano | grep :8000` before believing a restart happened**
+— a failed bind is silent from the browser's side.
+
+**The smoke test logged itself out.** The asset check walks every `href` in the shell, and one of them
+is `/logout`. Everything after it 401'd. The script's bug, not the app's, and it did confirm logout
+works.
+
+### Flagged, not changed
+
+`smtp_relay_cleartext.pcap` grades **A+ (95/100)**. That is USP-01 working as designed — the
+`SMTP-RELAY-NO-TLS` finding is downgraded MEDIUM → LOW because opportunistic relay on port 25 is
+outside the operator's control (RFC 7435) — and `scripts/evaluate.py` agrees with the hand-authored
+ground truth on both the finding and its severity. But *A+ is the top grade*, and "your tool gave an
+A+ to a server sending mail in plaintext" is a one-sentence attack with a three-sentence defence.
+The finding is reported; the curve is the question. **This is a scoring decision in `pipeline.py`, not
+a UI one**, so it was left alone and is recorded here for a deliberate call.
+
+**Next:** unchanged — real-world PCAPs, link-layer coverage (IPv6/VLAN/SLL), the Colab training run,
+and settling the project name.

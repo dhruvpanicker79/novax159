@@ -10,8 +10,10 @@ weaknesses, ranks them, and emits config snippets to fix them. **Nothing is decr
 with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 
 > **Naming conflict, unresolved.** `docs/10_RESEARCH_PAPER.md` calls the project **CyberKavach**; the code,
-> README and every other doc say **SecureMailScope**. Settle this before submission — it touches the slides,
-> the paper and the repo.
+> README and every other doc say **SecureMailScope**; the console's wordmark says **Kavach**. Settle this
+> before submission — it touches the slides, the paper and the repo. The UI half is now one line:
+> `app.config["BRAND"]` in `securemailscope/api/__init__.py`, or the `SMS_BRAND` environment variable
+> (ADR-0026).
 
 ---
 
@@ -19,9 +21,9 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 
 | | |
 |---|---|
-| Python | ~15,800 lines, plus ~1,500 of console CSS/JS/HTML |
+| Python | ~15,800 lines, plus ~2,200 of console CSS/JS/HTML |
 | Tests | **201, all passing** |
-| Docs | ~48,000 words across 12 documents, **24 ADRs** |
+| Docs | ~50,000 words across 12 documents, **27 ADRs** |
 | Deliverables | **26 met, 6 partial, 2 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
 | Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else |
@@ -30,7 +32,8 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 pip install dpkt flask
 python testbed/certgen.py && python testbed/synth.py     # build the corpus
 python scripts/analyse.py testbed/out/fleet.pcap --out out/ --trust testbed/certs/_ca.der
-python -m securemailscope.api                            # the SOC console, port 8000
+python -m securemailscope.api                            # the Kavach console, port 8000
+                                                         # analyst/analyst123 · admin/admin123
 python scripts/audit.py                                  # verify every deliverable
 python scripts/evaluate.py                               # measure accuracy; non-zero exit on disagreement
 for t in contract ml parsing tls certs report platform; do python tests/test_$t.py; done
@@ -48,7 +51,7 @@ for t in contract ml parsing tls certs report platform; do python tests/test_$t.
 | `docs/01_PROBLEM_STATEMENT.md` | PS decomposed into 21 deliverables (D01–D21) + O01/O02, traceability matrix |
 | `docs/02_USP.md` | The 11 USPs, with judge Q&A and slide mapping. **The PPT reference** |
 | `docs/03_ARCHITECTURE.md` | Pipeline, data model, module ownership |
-| `docs/04_DECISIONS.md` | **24 ADRs.** Every non-obvious decision, with what was rejected |
+| `docs/04_DECISIONS.md` | **27 ADRs.** Every non-obvious decision, with what was rejected |
 | `docs/05_WORKLOG.md` | Session-by-session record, including every bug found |
 | `docs/06_STATUS.md` | Verified deliverable status (`06_STATUS_GENERATED.txt` is the raw audit output) |
 | `docs/07_RELATED_WORK.md` | Seven papers reviewed; what to adopt from each |
@@ -85,7 +88,7 @@ PCAP → S0 ingest → S1 TCP reassembly → S2 protocol ID → S3 STARTTLS stat
 | `securemailscope/report/` | S10 | JSON + single self-contained HTML |
 | `securemailscope/store.py` | — | stdlib `sqlite3`, five tables, no ORM |
 | `securemailscope/siem.py` | — | CEF and ECS export |
-| `securemailscope/api/` | — | **Flask** service, stdlib auth, and the SOC console (`templates/`, `static/`) |
+| `securemailscope/api/` | — | **Flask** service, stdlib auth (ADR-0024), and the twelve-view console (ADR-0026) |
 | `testbed/` | — | `synth.py` writes PCAPs byte by byte; `certgen.py` makes signed certs |
 
 **Almost everything is written from scratch and stdlib-only.** That was forced (see §5), not stylistic.
@@ -155,8 +158,14 @@ example, so triage work becomes supervised signal rather than evaporating.
    cooked capture and we would report "no mail sessions". **Most likely cause of an on-stage failure.**
 7. **Real-world PCAPs.** Every capture measured so far is synthetic and self-authored.
 8. **PDF export** needs Playwright (blocked); browser print works and the print stylesheet is applied.
-9. **The offline HTML report has never been looked at by a human.** The console has now been driven
-   end to end in a browser (ADR-0025); the report is a separate renderer and has not been.
+9. **The offline HTML report has never been looked at by a human.** The console has been driven end to
+   end in a browser (ADR-0025, ADR-0026); the report is a separate renderer and has not been.
+10. **`smtp_relay_cleartext.pcap` grades A+ (95/100).** Correct per USP-01 — the relay finding is
+   downgraded to LOW because opportunistic relay is outside the operator's control (RFC 7435), and
+   `evaluate.py` agrees with ground truth. But *A+* is the top grade, and "you gave an A+ to a plaintext
+   mail server" is a one-line attack with a three-line defence. The finding is reported; the **curve** is
+   the open question. A scoring decision in `pipeline.py` — decide it deliberately, and re-run
+   `scripts/evaluate.py` if you touch it.
 
 `securemailscope/scoring/` is an empty stub, but that is cosmetic: its logic lives in `pipeline.py` and works.
 
@@ -191,6 +200,9 @@ DPDP Act 2023, FBI IC3 2025 ($3.04B BEC losses), India email security market ~$0
   a rule. The audit caught the USP-01 side-by-side silently breaking when the corpus moved to real certificates;
   the evaluation caught a rule that reported every legacy server as under attack.
 - Tests run without pytest: `python tests/test_<name>.py`.
+- **Working on the console?** `netstat -ano | grep :8000` before trusting a restart — a second server
+  that fails to bind exits silently and the stale one keeps serving, which cost half a session once
+  (worklog 7). Templates auto-reload; a new route or context processor does not.
 - Regenerate the contract after schema changes: `python -m schema.jsonschema`.
 - **Ground truth is authored from configuration, never from output.** `testbed/manifest.json` expectations were
   derived by reading `testbed/synth.py`. If evaluate.py disagrees, decide on the merits — do not paste in what
