@@ -1,0 +1,12 @@
+# Runtime dependencies. Three, and each one earns its place.
+#
+# Everything else in this project is stdlib on purpose: Smart App Control on
+# the development machines blocks compiled extensions, so the DER/X.509 parser,
+# the certificate generator, the gradient-boosting trainer and the isolation
+# forest are all written from scratch (CLAUDE.md section 5, ADR-0017, ADR-0031).
+# That constraint turns out to be a deployment advantage - there is nothing here
+# that needs a build toolchain.
+
+dpkt==1.9.8        # pcap/pcapng reading only; all protocol parsing is ours
+Flask==3.0.3       # the HTTP service (ADR-0021: FastAPI's Pydantic core is blocked)
+waitress==3.0.0    # production WSGI server, pure Python so it runs anywhere

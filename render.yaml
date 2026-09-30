@@ -1,0 +1,60 @@
+# Render blueprint. Point Render at this repo and it reads this file.
+#
+#   1. render.com -> New -> Blueprint
+#   2. connect github.com/dhruvpanicker79/novax159
+#   3. Apply. First build takes ~5 minutes (it generates RSA keys and trains
+#      the model); later builds are cached.
+#
+# The free plan spins down after ~15 minutes idle and has ephemeral disk, so the
+# first request after a nap takes a few seconds and the database resets. That is
+# fine here: the app re-seeds the bundled captures on boot, so the demo is always
+# populated and always identical.
+
+services:
+  - type: web
+    name: kavach
+    runtime: docker
+    plan: free
+    region: singapore          # closest to India; change if you prefer
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true           # redeploys when main is pushed
+
+    envVars:
+      # Session signing key. Render generates one and keeps it across deploys,
+      # so people are not logged out on every push.
+      - key: SMS_SECRET
+        generateValue: true
+
+      # TLS is terminated by Render, so the session cookie is marked Secure.
+      - key: SMS_BEHIND_TLS
+        value: "1"
+
+      # Ephemeral disk on the free plan: keep uploads small and bounded.
+      - key: SMS_MAX_UPLOAD
+        value: "26214400"      # 25 MB; the bundled captures are ~30 KB
+      - key: SMS_MAX_JOBS
+        value: "40"
+
+      # Failed sign-ins allowed per address per 5 minutes.
+      - key: SMS_LOGIN_ATTEMPTS
+        value: "20"
+
+      # The wordmark. The project name is still unsettled (CLAUDE.md), so it is
+      # a variable rather than a string in four templates (ADR-0026).
+      - key: SMS_BRAND
+        value: Kavach
+
+      # --------------------------------------------------------------------
+      # DEMO CREDENTIALS ARE ACTIVE.
+      #
+      # analyst/analyst123 and admin/admin123 are seeded on first boot, so a
+      # judge can follow the link and sign in without being handed a password.
+      # That is a deliberate trade for a public demo of synthetic data: anyone
+      # who finds the URL can sign in and upload a capture.
+      #
+      # To close it, set SMS_ADMIN_PASSWORD here (or in the Render dashboard)
+      # and redeploy. /api/deployment reports which mode is live.
+      # --------------------------------------------------------------------
+      # - key: SMS_ADMIN_PASSWORD
+      #   sync: false

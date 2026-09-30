@@ -26,7 +26,7 @@ with AI assistance. Repo: `github.com/dhruvpanicker79/novax159` (private).
 | Docs | ~55,000 words across 12 documents, **32 ADRs** |
 | Deliverables | **32 met, 1 partial, 1 not built** — verify with `python scripts/audit.py` |
 | Accuracy | precision 1.00, recall 1.00 over 14 captures / 20 rules (`scripts/evaluate.py`) |
-| Runtime dependency | **`dpkt`** for analysis, **`flask`** for the service. Nothing else — **including training** (ADR-0031) |
+| Runtime dependency | **`dpkt`**, **`flask`**, **`waitress`** — see `requirements.txt`. Nothing else, **including training** (ADR-0031) |
 
 ```bash
 pip install dpkt flask
@@ -34,6 +34,7 @@ python testbed/certgen.py && python testbed/synth.py     # build the corpus
 python testbed/relink.py                                 # + 7 link-layer variants
 python scripts/analyse.py testbed/out/fleet.pcap --out out/ --trust testbed/certs/_ca.der
 ./run.sh            # or .
+SMS_BEHIND_TLS=0 python -m securemailscope.api.production   # production server (waitress)
 un.ps1 — builds, trains, verifies and serves
 python scripts/train_local.py                            # train: pure Python, 11 s
 python -m securemailscope.api                            # the Kavach console, port 8000
@@ -65,6 +66,7 @@ Control does not block. `core.sshCommand` is pinned in `.git/config`, so `git pu
 | `docs/09_DECK_CONTENT.md` | Deck content, box by box |
 | `docs/10_RESEARCH_PAPER.md` | Full paper draft (uses the name *CyberKavach*) |
 | `docs/11_TODO.md` | **The backlog.** Ordered by value, no dates |
+| `DEPLOY.md` | Deploying to Render/Railway/Docker, and what the public demo accepts |
 
 **Rules:** every non-obvious decision becomes a numbered ADR; every session appends to the worklog; the schema is
 the contract and changes update `03_ARCHITECTURE.md` in the same commit; every detection rule carries its

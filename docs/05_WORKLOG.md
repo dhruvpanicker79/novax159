@@ -1015,3 +1015,53 @@ Also of note: `run.ps1` was badly mangled mid-session by shell escaping — `mod
 became `modelsisk_model.json` because `\r` survived into the file as a carriage return. Rewritten with a
 tool that does not shell-escape. **Third time backslash handling has corrupted a file this project;
 generating Windows paths through a POSIX shell is a standing hazard.**
+
+---
+
+## Session 14 — 2026-09-30 · deployable
+
+**What shipped.** `securemailscope/api/production.py`, `Dockerfile`, `render.yaml`, `Procfile`,
+`requirements.txt`, `DEPLOY.md`. The console now runs behind **waitress** — pure Python, so it needs no
+build toolchain on the deploy host, which is the same constraint that shaped everything else here.
+
+**The question was "backend and frontend are functioning and connected, right?"** Yes: 22 routes, the
+console consumes them, driven end to end. But "functioning" and "deployable" are different claims, and
+the gap was four real blockers.
+
+### Blockers found
+
+**`/api/health` required authentication.** Render polls it to decide whether the container is alive, so
+every probe would have returned 401, the service would have read as unhealthy, and it would have
+restart-looped forever. Now unguarded, returning liveness only. An audit of which routes are open now
+prints exactly four: `/api/health`, `/login`, `/logout`, `/static/*`.
+
+**`app.run()` is Flask's development server**, which its own documentation says not to deploy. Replaced
+with waitress on `0.0.0.0` and `$PORT`.
+
+**A fresh container would have been an empty shell.** Free tiers restart on idle with ephemeral disk, so
+a judge following the link would have seen *"No capture analysed yet"*. `production.seed()` analyses the
+two bundled captures on boot — two, not one, because `fleet.pcap` and `fleet_later.pcap` are what make
+the Posture Drift view show anything. It is skipped when the work is already there.
+
+**Uploads and jobs grew without bound.** Capped at 25 MB with the oldest jobs pruned on boot.
+
+### The trade that was chosen deliberately
+
+The demo credentials stay active and the login page prints them, so a judge can follow a link and sign
+in without being handed a password. That was asked for after the risk was stated, and it is written
+down in `DEPLOY.md` rather than left implicit: **anyone who finds the URL can sign in and upload a
+capture.** Defensible because the data is synthetic and the parser is pure Python with no `eval` and no
+untrusted deserialisation, so the realistic worst case is resource abuse. The mitigations are sized for
+that and no larger: upload cap, job pruning, per-address login rate limiting, `Secure` cookies.
+`SMS_ADMIN_PASSWORD` closes it in one variable, and `/api/deployment` reports which mode is live.
+
+### Small things worth remembering
+
+`SMS_BEHIND_TLS=1` marks the session cookie `Secure`, so testing the production server over plain HTTP
+locally makes sign-in appear to fail silently. Set `0` locally; it is in `DEPLOY.md`.
+
+The Dockerfile builds the corpus, trains the model and renders the reports **at image build time**, then
+runs `scripts/audit.py` and two test suites as a build step. A build that produces a broken artifact
+fails there rather than in front of a judge.
+
+**Next:** USP-11 is the only unbuilt deliverable, D20's PDF needs Playwright, and the deck is unstarted.

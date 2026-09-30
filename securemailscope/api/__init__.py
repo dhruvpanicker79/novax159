@@ -357,8 +357,15 @@ def create_app(db_path: str | Path | None = None):
         return jsonify(job.to_dict()), 202
 
     @app.get("/api/health")
-    @login_required
     def health():
+        """Deliberately **not** behind `login_required`.
+
+        A platform health check is unauthenticated by definition: Render and
+        Railway poll this to decide whether the container is alive. Guarding it
+        makes every probe a 401, which reads as unhealthy and restart-loops the
+        service forever. It returns liveness only - no capture data, no host
+        names, no findings.
+        """
         return jsonify(status="ok", jobs=len(store.list_jobs()))
 
     @app.get("/api/me")
