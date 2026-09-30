@@ -341,3 +341,36 @@ def describe(samples: list[Sample]) -> dict[str, object]:
                        sorted(roles.items(), key=lambda kv: -kv[1])},
         "mean_target": round(sum(s.target for s in samples) / n, 4),
     }
+
+
+def main() -> int:
+    """`python -m securemailscope.ml.corpus`
+
+    This entry point did not exist, so the documented command imported the
+    module, did nothing and exited 0. `run.sh` then reported "training corpus
+    generated", the trainer found no corpus, and the launcher announced that
+    the *model had lost to the baseline* — a reassuring sentence about a
+    completely different failure. A fresh clone therefore came up with no
+    trained model and nobody would have known why.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate the training corpus.")
+    parser.add_argument("--rows", type=int, default=10_000)
+    parser.add_argument("--seed", type=int, default=20260923)
+    parser.add_argument("--out", type=Path,
+                        default=Path(__file__).resolve().parents[2] / "data" / "corpus.csv")
+    args = parser.parse_args()
+
+    samples = generate(args.rows, args.seed)
+    path = write_csv(samples, args.out)
+    stats = describe(samples)
+    print(f"wrote {path}  ({path.stat().st_size / 1024:.0f} KB)")
+    print(f"  rows        {stats['count']:,}")
+    print(f"  labels      {stats['labels']}")
+    print(f"  mean target {stats['mean_target']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

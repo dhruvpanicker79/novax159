@@ -966,3 +966,52 @@ runs the audit and the evaluation, then serves. Idempotent, so a warm checkout s
 
 **Next:** USP-11 (passive DANE / MTA-STS) is the only unbuilt item, and D20's PDF needs Playwright,
 which is blocked. Nothing is waiting on a human.
+
+---
+
+## Session 13 — 2026-09-30 · what a fresh clone actually does
+
+**Trigger.** The question was *"is everything committed?"* — and `git status` was clean, 0 unpushed,
+local and remote identical. That is the easy half of the answer and it is not the useful half. The
+corpus, certificates and trained models are all **deliberately** gitignored build artifacts, so the real
+question is whether someone cloning the repo gets a working project.
+
+They did not. **Cloning the repo and running `./run.sh` produced 26 met / 5 partial / 3 not built**,
+against 32 / 1 / 1 on this machine. Three bugs, none of which `git status` could ever have shown.
+
+### 1. A documented command that did nothing
+
+`securemailscope/ml/corpus.py` had **no `__main__` block**. `python -m securemailscope.ml.corpus` — the
+command in `CLAUDE.md`, in `run.sh`, and in the trainer's own error message — imported the module, did
+nothing, and **exited 0**. Every caller believed it had worked.
+
+### 2. A failure reported as a different, more reassuring failure
+
+`run.sh` treated any non-zero exit from `train_local.py` as *"the model did not beat the baseline — the
+baseline ships (this is fine)"*. So a missing corpus, and later an actual `SyntaxError` I introduced
+mid-session, both printed a calm sentence about an entirely different outcome. **Exit 1 is too generic
+to carry meaning**: Python returns it for an uncaught exception and for a syntax error. The trainer now
+returns **3** for "lost to the baseline" specifically, and the launcher treats anything else as a real
+failure and prints how to reproduce it.
+
+### 3. The audit under-reported by three deliverables
+
+D20, D21 and USP-06 are audited by **reading the rendered artifacts** in `out/`, and USP-07 by reading
+`out/evaluation.json`. `run.sh` never ran `scripts/analyse.py`, and ran `evaluate.py` without `--json`.
+So a judge cloning the repo and running the audit would have seen **29 / 2 / 3** — three deliverables
+worse than the truth, on evidence that was sitting one command away.
+
+**A fresh copy of the tracked files now reproduces 32 / 1 / 1 exactly.** Verified by tarring
+`git ls-files` into an empty directory and running `./run.sh --check` from cold.
+
+### The generalisation
+
+**"Committed" is not the same as "reproducible", and only one of them is checkable with `git status`.**
+Every one of these failures was invisible on the machine where the artifacts already existed. The test
+is not *is the tree clean* — it is *does an empty directory plus this repo produce the same numbers*.
+Worth doing again before submission, from an actual `git clone` rather than a copy.
+
+Also of note: `run.ps1` was badly mangled mid-session by shell escaping — `models\risk_model.json`
+became `modelsisk_model.json` because `\r` survived into the file as a carriage return. Rewritten with a
+tool that does not shell-escape. **Third time backslash handling has corrupted a file this project;
+generating Windows paths through a POSIX shell is a standing hazard.**

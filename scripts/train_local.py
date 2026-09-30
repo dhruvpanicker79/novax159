@@ -24,6 +24,11 @@ the score would collapse on real traffic.
 **3. If the model loses, the baseline ships.** The rule-derived baseline is a
 real product, not a placeholder. This script refuses to write a model that does
 not beat it, and says so.
+
+Exit codes: 0 wrote a model, 2 no corpus, **3 the model lost and nothing was
+written**. Deliberately not 1 for that last one - Python exits 1 for an
+uncaught exception and for a SyntaxError, and `run.sh` was reporting a crash in
+this file as the reassuring "model did not beat the baseline".
 """
 
 from __future__ import annotations
@@ -173,7 +178,7 @@ def main() -> int:
         print("  the better product and it is what ships. That is a real result,")
         print("  not a failure — re-run with --force to override deliberately.")
         print("=" * 74)
-        return 1
+        return 3
 
     args.out.mkdir(parents=True, exist_ok=True)
     model.save(args.out / "risk_model.json")

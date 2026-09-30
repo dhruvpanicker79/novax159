@@ -33,7 +33,8 @@ pip install dpkt flask
 python testbed/certgen.py && python testbed/synth.py     # build the corpus
 python testbed/relink.py                                 # + 7 link-layer variants
 python scripts/analyse.py testbed/out/fleet.pcap --out out/ --trust testbed/certs/_ca.der
-./run.sh            # or .un.ps1 — builds, trains, verifies and serves
+./run.sh            # or .
+un.ps1 — builds, trains, verifies and serves
 python scripts/train_local.py                            # train: pure Python, 11 s
 python -m securemailscope.api                            # the Kavach console, port 8000
                                                          # analyst/analyst123 · admin/admin123
@@ -225,6 +226,12 @@ DPDP Act 2023, FBI IC3 2025 ($3.04B BEC losses), India email security market ~$0
   a rule. The audit caught the USP-01 side-by-side silently breaking when the corpus moved to real certificates;
   the evaluation caught a rule that reported every legacy server as under attack.
 - Tests run without pytest: `python tests/test_<name>.py`.
+- **Before submission, verify from an empty directory**, not from this one. The corpus, certificates
+  and models are gitignored build artifacts, so a clean `git status` says nothing about whether a
+  clone works. `git clone . /tmp/x && cd /tmp/x && ./run.sh --check` must print **32 met**. It printed
+  26 the first time it was tried (worklog 13): a documented command that silently did nothing, a
+  launcher that reported the failure as something reassuring, and an audit missing artifacts nobody
+  had generated.
 - **Working on the console?** `netstat -ano | grep :8000` before trusting a restart — a second server
   that fails to bind exits silently and the stale one keeps serving, which cost half a session once
   (worklog 7). Templates auto-reload; a new route or context processor does not.

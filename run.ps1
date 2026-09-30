@@ -48,51 +48,83 @@ Ok "flask works"
 # --------------------------------------------------------------------------- #
 Step "Building the test corpus"
 if ($Fresh) {
-    foreach ($p in "testbed\out", "testbed\certs", "models") {
+    foreach ($p in "testbed/out", "testbed/certs", "models") {
         if (Test-Path $p) { Remove-Item -Recurse -Force $p }
     }
-    if (Test-Path "data\corpus.csv") { Remove-Item -Force "data\corpus.csv" }
+    if (Test-Path "data/corpus.csv") { Remove-Item -Force "data/corpus.csv" }
 }
 
-if (-not (Test-Path "testbed\certs\_ca.der")) {
-    & $py testbed\certgen.py | Out-Null
+if (-not (Test-Path "testbed/certs/_ca.der")) {
+    & $py testbed/certgen.py | Out-Null
     Ok "certificates generated"
 } else { Ok "certificates already present" }
 
-if (-not (Test-Path "testbed\out\fleet.pcap")) {
-    & $py testbed\synth.py --out testbed\out | Out-Null
+if (-not (Test-Path "testbed/out/fleet.pcap")) {
+    & $py testbed/synth.py --out testbed/out | Out-Null
     Ok "captures written"
 } else { Ok "captures already present" }
 
-if (-not (Test-Path "testbed\out\fleet_sll.pcap")) {
-    & $py testbed\relink.py | Out-Null
+if (-not (Test-Path "testbed/out/fleet_sll.pcap")) {
+    & $py testbed/relink.py | Out-Null
     Ok "link-layer variants written"
 } else { Ok "link-layer variants already present" }
 
 # --------------------------------------------------------------------------- #
 if (-not $NoTrain) {
     Step "Training the model"
-    if (-not (Test-Path "data\corpus.csv")) {
+
+    if (-not (Test-Path "data/corpus.csv")) {
         & $py -m securemailscope.ml.corpus | Out-Null
+        # Verify, do not assume. This step silently did nothing for a while,
+        # because ml/corpus.py had no __main__ block: the command exited 0
+        # having written no corpus, and the failure surfaced later as a much
+        # more reassuring message about the model losing to the baseline.
+        if (-not (Test-Path "data/corpus.csv")) {
+            Write-Host "    ERROR: data/corpus.csv was not written." -ForegroundColor Red
+            Write-Host "    Run it directly to see why: $py -m securemailscope.ml.corpus" -ForegroundColor Red
+            exit 1
+        }
         Ok "training corpus generated"
-    }
-    if (-not (Test-Path "models\risk_model.json")) {
+    } else { Ok "training corpus already present" }
+
+    if (-not (Test-Path "models/risk_model.json")) {
         # Pure Python, about ten seconds. No numpy, no scikit-learn, no Colab.
-        # If it loses to the rule-derived baseline it refuses to write, and the
-        # baseline ships - a real result, not a failure.
-        & $py scripts\train_local.py
-        if ($LASTEXITCODE -eq 0) { Ok "model trained" }
-        else { Warn "model did not beat the baseline - the baseline ships (this is fine)" }
+        # Exit 1 means the model lost to the rule-derived baseline and the
+        # baseline ships, which is a real result. Anything else is a genuine
+        # failure and must not be reported as the former.
+        & $py scripts/train_local.py
+        switch ($LASTEXITCODE) {
+            0 { Ok "model trained" }
+            3 { Warn "model did not beat the baseline - the baseline ships (this is fine)" }
+            default {
+                Write-Host "    ERROR: training failed (exit $LASTEXITCODE)" -ForegroundColor Red
+                exit $LASTEXITCODE
+            }
+        }
     } else { Ok "model already trained (use -Fresh to retrain)" }
 } else {
     Warn "skipping training - the rule-derived baseline will be used"
 }
 
 # --------------------------------------------------------------------------- #
+Step "Generating the reports"
+# Not cosmetic: D20, D21 and USP-06 are audited by reading the rendered
+# artifacts, not by inspecting the renderer. Without this step a fresh clone
+# audits three deliverables lower than the same code on a warm checkout.
+if ((-not (Test-Path "out/report.json")) -or $Fresh) {
+    & $py scripts/analyse.py testbed/out/fleet.pcap --out out/ --trust testbed/certs/_ca.der | Out-Null
+    Ok "report.json, report.html and the four persona views written to out/"
+} else { Ok "reports already present" }
+
+# USP-07 is audited from this file, so write it rather than only printing it.
+& $py scripts/evaluate.py --json out/evaluation.json 2>$null | Out-Null
+Ok "evaluation written to out/evaluation.json"
+
+# --------------------------------------------------------------------------- #
 Step "Verifying"
-& $py scripts\audit.py | Select-Object -Last 4
+& $py scripts/audit.py | Select-Object -Last 4
 Write-Host ""
-& $py scripts\evaluate.py | Select-Object -Last 8
+& $py scripts/evaluate.py | Select-Object -Last 8
 
 if ($Check) {
     Step "Done (-Check: not starting the server)"
