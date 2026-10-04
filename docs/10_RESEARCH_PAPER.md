@@ -10,7 +10,7 @@
 **Theme:** Blockchain & Cybersecurity
 **Category:** Software
 **Smart India Hackathon 2026**
-**27 September 2026**
+**3 October 2026**
 
 ---
 
@@ -31,12 +31,15 @@ individual operator what happened to their own mail. This paper presents **Cyber
 offline-first framework that answers that question. It ingests authorised packet captures, reconstructs every
 SMTP, IMAP and POP3 session, parses TLS handshakes and X.509 certificates without decrypting any payload,
 evaluates 34 rules across ten categories, extracts 51 features per session, and emits a graded report in which
-every finding is traceable to a capture hash, frame number and byte offset. Three decisions distinguish it:
-severity is adjusted by the role of the port, since an expired certificate is routine between two relays and
-critical where a password crosses; five passive detectors report evidence that an attack has already occurred
-rather than that one is possible; and a host whose handshake could not be fully parsed is graded `?` rather than
-given a pass it did not earn. It is implemented in some 13,300 lines of Python with one pure-Python dependency
-and 168 passing tests, so that it runs on an air-gapped machine.
+every finding is traceable to a capture hash, frame number and byte range. Four decisions distinguish it:
+severity is adjusted by the role of the port; five passive detectors report evidence that an attack has already
+occurred; a host whose handshake could not be parsed is graded `?` rather than given a pass it did not earn; and
+an attack-feasibility matrix reports what it has **ruled out** as well as what it found. The system is
+approximately 15,800 lines of Python with three runtime dependencies and **277 passing tests**. Against a
+ground-truth corpus derived from generator configuration rather than from tool output, it shows **no
+disagreement across 14 captures and 20 rules**. Its risk model is a gradient-boosted ensemble trained in pure
+Python in twelve seconds, reaching a held-out **MAE of 0.0451 against a 0.1681 rule-derived baseline — 73%
+better, R² 0.94**.
 
 **Keywords:** Email security, STARTTLS, passive network forensics, cryptographic posture assessment,
 post-quantum readiness, digital evidence
@@ -48,22 +51,22 @@ post-quantum readiness, digital evidence
 1. Introduction
 2. Literature Review and Related Work
 3. Technical Architecture and Design
-4. Testing and Validation Methodology
-5. User Flows and System Interactions
-6. Innovation and Technical Features
-7. Technology Stack and Implementation
-8. Detailed Technical Implementation
-9. Feasibility Analysis
-10. Challenges and Solutions
-11. Impact Assessment and Benefits
-12. Sustainability and Long-Term Viability
-13. International Benchmarking and Best Practices
-14. Implementation Roadmap
-15. Risk Management and Mitigation
-16. Future Enhancements and Scalability
-17. Conclusion
-18. References
-19. Appendices A–F
+4. Detailed Technical Implementation
+5. The Machine Learning Layer
+6. Testing, Evaluation and Measured Results
+7. User Flows and System Interactions
+8. Innovation and Technical Features
+9. Technology Stack and Platform Layer
+10. Feasibility Analysis
+11. Challenges and Solutions
+12. Impact Assessment and Benefits
+13. Sustainability and Long-Term Viability
+14. International Benchmarking and Best Practices
+15. Implementation Roadmap
+16. Risk Management and Mitigation
+17. Limitations and Future Enhancements
+18. Conclusion
+19. References and Appendices
 
 ---
 
@@ -71,42 +74,39 @@ post-quantum readiness, digital evidence
 
 ## 1.1 Background and Motivation
 
-SMTP was specified without confidentiality or authentication. Both were retro-fitted: first through the
-STARTTLS extension (RFC 3207), which upgrades an established plaintext connection in place, and later through
-implicit TLS on dedicated ports (RFC 8314). The retro-fit was deliberately permissive. RFC 7435 formalised the
-resulting model as *opportunistic security*: encrypt when both ends agree, and proceed in plain text when they
-do not, on the reasoning that partial protection deployed widely beats strong protection deployed nowhere.
+SMTP was specified without confidentiality or authentication. Both were retro-fitted: first through the STARTTLS
+extension (RFC 3207), which upgrades an established plaintext connection in place, and later through implicit
+TLS on dedicated ports (RFC 8314). The retro-fit was deliberately permissive. RFC 7435 formalised the resulting
+model as *opportunistic security*: encrypt when both ends agree, proceed in plain text when they do not, on the
+reasoning that partial protection deployed widely beats strong protection deployed nowhere.
 
-That reasoning was sound for adoption and is corrosive for assurance. Three properties follow from it, and
-together they define the problem this project addresses.
+That reasoning was sound for adoption and is corrosive for assurance. Three properties follow, and together they
+define the problem this work addresses.
 
-**It fails open, silently.** Where a TLS negotiation errors — or is made to error — the mail is delivered
-anyway, unencrypted. Durumeric et al. tested five widely deployed mail transfer agents and found that all five
-fall back to cleartext when STARTTLS fails, and that two of the three most popular platforms do not attempt
-STARTTLS at all unless explicitly configured to. No signal reaches the user, and the protocol provides no
-mechanism for a sender to require secure transport or for a recipient to learn that a message travelled
-insecurely.
+**It fails open, silently.** Where a TLS negotiation errors — or is made to error — the mail is delivered anyway,
+unencrypted. Durumeric et al. tested five widely deployed mail transfer agents and found all five fall back to
+cleartext when STARTTLS fails, and that two of the three most popular platforms do not attempt STARTTLS at all
+unless explicitly configured. No signal reaches the user, and the protocol offers no mechanism for a sender to
+require secure transport or for a recipient to learn that a message travelled insecurely.
 
 **It is rarely authenticated.** Encrypting to an unverified peer defeats an eavesdropper but not an active
 attacker. Mayer et al. scanned the entire IPv4 address space across SMTP, POP3 and IMAP — 20 million IP/port
-combinations and more than 10 billion TLS handshakes over three months — and found 65% of SMTP hosts
-presenting self-signed certificates, with only 33–37% of mail-access deployments presenting certificates that
-validate correctly. Durumeric et al. tested 19 major providers by presenting a self-signed certificate: not one
-rejected it.
+combinations and more than 10 billion TLS handshakes over three months — and found 65% of SMTP hosts presenting
+self-signed certificates, with only 33–37% of mail-access deployments presenting certificates that validate.
+Durumeric et al. presented a self-signed certificate to 19 major providers: not one rejected it.
 
-**The upgrade step itself is a vulnerability class.** Poddebniak et al. performed the first structured security
-analysis of STARTTLS across SMTP, POP3 and IMAP, testing 28 clients and 23 servers with a 100-test-case
-toolkit. They reported more than 40 distinct flaws, found that only 3 of 28 clients exhibited no
-STARTTLS-specific issue, and scanned the internet to establish that 320,000 mail servers — 2% of all mail
-servers — were vulnerable to a command injection that permits credential theft. Their conclusion is
-unambiguous: STARTTLS is error-prone to implement, under-specified in the standards, and should be avoided in
-favour of implicit TLS.
+**The upgrade step is itself a vulnerability class.** Poddebniak et al. performed the first structured security
+analysis of STARTTLS across SMTP, POP3 and IMAP, testing 28 clients and 23 servers with a 100-test-case toolkit.
+They reported more than 40 distinct flaws, found only 3 of 28 clients exhibited no STARTTLS-specific issue, and
+scanned the internet to establish that 320,000 mail servers — 2% of all mail servers — were vulnerable to a
+command injection permitting credential theft. Their conclusion is unambiguous: STARTTLS is error-prone to
+implement, under-specified, and should be avoided in favour of implicit TLS.
 
 These are not theoretical risks. Durumeric et al. found 41,405 SMTP servers across 4,714 autonomous systems in
 193 countries whose STARTTLS negotiations were being corrupted in transit, and measured the effect at Gmail:
 96.13% of mail sent from Tunisia arrived in plain text, with seven countries above 20%. Of the 423 autonomous
-systems where every observed mail server showed stripping behaviour, 13.5% were financial institutions and
-7.1% were government networks.
+systems where every observed mail server showed stripping behaviour, 13.5% were financial institutions and 7.1%
+were government networks.
 
 ## 1.2 Problem Statement
 
@@ -116,36 +116,38 @@ reconstructs complete TCP sessions; parses TLS handshakes and extracts X.509 cer
 algorithms and deprecated protocol versions against NIST SP 800-52 Rev 2 and the relevant RFCs; applies machine
 learning for risk classification and anomaly detection; and exports prioritised, evidence-backed findings as
 JSON, HTML and PDF with an interactive dashboard. The statement is explicit that every finding must be reported
-as OBSERVED, NOT_FOUND, UNKNOWN or INSUFFICIENT_EVIDENCE, never as an inference presented as a fact.
+as OBSERVED, NOT_FOUND, UNKNOWN or INSUFFICIENT_EVIDENCE, never as an inference presented as fact.
 
-Our own decomposition of the statement into 21 numbered deliverables (D01–D21) plus two objectives (O01, O02)
-and a traceability matrix is recorded in `docs/01_PROBLEM_STATEMENT.md`; verified status is generated
-mechanically by `scripts/audit.py` and recorded in `docs/06_STATUS.md`.
+Our decomposition into 21 numbered deliverables (D01–D21) plus two objectives (O01, O02) and a traceability
+matrix is recorded in `docs/01_PROBLEM_STATEMENT.md`; verified status is generated mechanically by
+`scripts/audit.py`.
 
-The framing that matters for this paper is narrower. The published literature establishes what is wrong with
-email transport security at ecosystem scale. It does so entirely through **active measurement**: ZMap sweeps of
-the address space, DNS scans, probes issued to endpoints. An operator reading those papers learns that the
-problem is severe and learns nothing about their own estate. The question *"what did my mail actually do, and
-did anyone interfere with it?"* has no tool behind it — and under the CERT-In Directions of 2022 an Indian
-organisation must answer a version of it within six hours of noticing an incident, using log data it is
-separately required to retain for 180 days.
+The framing that matters is narrower. The literature establishes what is wrong with email transport security at
+ecosystem scale, and does so entirely through **active measurement**: ZMap sweeps, DNS scans, probes issued to
+endpoints. An operator reading those papers learns the problem is severe and learns nothing about their own
+estate. The question *"what did my mail actually do, and did anyone interfere with it?"* has no tool behind it —
+and under the CERT-In Directions of 2022 an Indian organisation must answer a version of it within six hours of
+noticing an incident, using log data it is separately required to retain for 180 days.
 
 ## 1.3 Solution Overview
 
-CyberKavach is a twelve-stage analysis pipeline that converts a packet capture into a graded, evidence-linked
+CyberKavach is an eleven-stage analysis pipeline that converts a packet capture into a graded, evidence-linked
 cryptographic posture report. It performs no decryption, makes no network calls, and requires no service to be
 reachable.
 
-Given a capture, it reassembles TCP streams while retaining a byte-to-frame provenance map; identifies mail
-protocols from the server banner and command grammar rather than the port number; runs a STARTTLS state machine
-with ten checks; parses TLS records and handshake messages, computing JA3 and JA3S fingerprints and detecting
-post-quantum key-exchange groups; parses X.509 certificates from DER and verifies RSA signatures; evaluates 34
-rules across ten finding categories; extracts 51 features per session; scores risk, detects anomalies against a
-fleet baseline and orders findings by priority; aggregates to per-host and fleet grades on an A+ to F scale with
-`?` reserved for hosts that could not be fully assessed; and writes JSON, a single self-contained HTML file
-that is also the interactive dashboard, and PDF.
+Given a capture it decodes seven link-layer encapsulations; reassembles TCP streams while retaining a
+byte-to-frame provenance map; identifies mail protocols from the server banner and command grammar rather than
+the port number; runs a STARTTLS state machine with ten checks; parses TLS records and handshake messages,
+computing JA3 and JA3S fingerprints and detecting post-quantum key-exchange groups; parses X.509 certificates
+from DER and verifies RSA signatures; evaluates 34 rules across ten finding categories; extracts 51 features per
+session; scores risk with a gradient-boosted ensemble, detects anomalies with an isolation forest and orders
+findings by priority; aggregates to per-host and fleet grades on an A+ to F scale with `?` reserved for hosts
+that could not be fully assessed; judges 16 named attacks as feasible, ruled out or not observable; compares two
+captures for posture drift; generates a narrative mechanically verified against the report's own facts; and
+writes JSON, a single self-contained HTML file, CEF and ECS exports for a SIEM, and a twelve-view operations
+console.
 
-Every finding carries the SHA-256 of the capture, the stream index, the frame numbers and the byte offsets that
+Every finding carries the SHA-256 of the capture, the stream index, the frame numbers and the byte range that
 produced it, together with the standards clause it enforces and the configuration change that fixes it.
 
 ## 1.4 Market Analysis and Current State
@@ -153,11 +155,9 @@ produced it, together with the standards clause it enforces and the configuratio
 ### 1.4.1 The threat, in financial terms
 
 The FBI's Internet Crime Complaint Center recorded $20.877 billion in reported losses in 2025 across 1,008,597
-complaints, a 26% year-on-year increase. Business email compromise accounted for **$3.046 billion** of that —
-the second-largest single loss category after investment fraud — across 24,768 complaints, an average of
-roughly $123,000 per incident. BEC is an identity and trust failure rather than purely a transport failure, but
-transport security is the layer at which message tampering, credential capture and relay interception are
-prevented, and it is the layer at which a forensic capture can establish what was possible.
+complaints, a 26% year-on-year increase. Business email compromise accounted for **$3.046 billion** — the
+second-largest single loss category after investment fraud — across 24,768 complaints, an average of roughly
+$123,000 per incident.
 
 ### 1.4.2 The cryptographic posture of mail infrastructure, as measured
 
@@ -175,188 +175,162 @@ prevented, and it is the layer at which a forensic capture can establish what wa
 | Post-quantum key exchange: web vs. mail | **44.0%** of HTTPS vs **6.4%** of SMTP endpoints | Loizou & Ghadafi, 2026 |
 | Post-quantum certificates | **zero**, across every study to date | Loizou & Ghadafi; arXiv 2606.16473 |
 
-In India specifically, CERT-In handled **29.44 lakh** incidents in 2025, up from 20.41 lakh in 2024, of which
-**3,41,646** were classified as vulnerable services — the precise category for which this tool produces
-evidence.
+In India, CERT-In handled **29.44 lakh** incidents in 2025, up from 20.41 lakh in 2024, of which **3,41,646**
+were classified as vulnerable services — the precise category for which this tool produces evidence.
 
 ### 1.4.3 Regulatory drivers and market size
 
-Three regulatory currents converge on this capability.
+**Incident forensics.** The CERT-In Directions of 28 April 2022 require reporting within six hours of noticing an
+incident and retention of ICT system logs for 180 days within Indian jurisdiction. The Digital Personal Data
+Protection Rules, notified 13 November 2025, require a detailed breach report within 72 hours, with penalties to
+₹200 crore.
 
-**Incident forensics.** The CERT-In Directions of 28 April 2022 require reporting within six hours of noticing
-an incident and the retention of ICT system logs for 180 days within Indian jurisdiction. The Digital Personal
-Data Protection Rules, notified 13 November 2025, require a detailed breach report within 72 hours, with
-penalties to ₹200 crore for failure to notify.
-
-**Evidence admissibility.** Section 63 of the Bharatiya Sakshya Adhiniyam, 2023 conditions the admissibility of
+**Evidence admissibility.** Section 63 of the Bharatiya Sakshya Adhiniyam, 2023 conditions admissibility of
 electronic records on a certificate stating the record's hash value, and courts have been directed to treat an
 unexplained hash variation between seizure and presentation as raising a strong presumption of tampering.
 
 **Cryptographic inventory and the post-quantum transition.** The Department of Science and Technology's task
 force under the National Quantum Mission published India's PQC migration roadmap in February 2026. Its first
 milestone — *inventory cryptographic assets and assess quantum risk* — falls due in **2027** for critical
-information infrastructure and 2028 for enterprises, with high-priority migration by 2028/2030, full adoption
-by 2029/2033, and **Cryptographic Bills of Materials required from vendors from FY 2027–28**. MeitY, CERT-In
-and SISA set the same direction in a July 2025 whitepaper. The UK's NCSC places cryptographic discovery,
-dependency mapping and migration planning at 2028. NIST IR 8547 deprecates RSA-2048 and P-256 after 2030 and
-disallows them after 2035. Every roadmap begins with discovery; for email infrastructure no discovery tool
-exists.
+information infrastructure and 2028 for enterprises, with full adoption by 2029/2033 and **Cryptographic Bills
+of Materials required from vendors from FY 2027–28**. The UK's NCSC places cryptographic discovery at 2028. NIST
+IR 8547 deprecates RSA-2048 and P-256 after 2030 and disallows them after 2035. Every roadmap begins with
+discovery; for email infrastructure no discovery tool exists.
 
-Market sizing, which should be read as vendor research rather than peer-reviewed measurement, puts the India
-email security market at $0.427 billion in 2025 rising to $1.31 billion by 2035 (11.82% CAGR), and the
-post-quantum cryptography market at $810 million in 2025 rising to $18.19 billion by 2035. The relevant
-distribution channel already exists: CERT-In had empanelled 231 cybersecurity audit organisations by the end of
-2025.
+Market sizing — vendor research rather than peer-reviewed measurement — puts the India email security market at
+$0.427 billion in 2025 rising to $1.31 billion by 2035 (11.82% CAGR), and post-quantum cryptography at $810
+million rising to $18.19 billion. CERT-In had empanelled 231 cybersecurity audit organisations by end-2025.
 
 ---
 
 # 2. Literature Review and Related Work
 
-Seven papers are reviewed in depth in `docs/07_RELATED_WORK.md`. This section situates the contribution against
-the fourteen studies that bear on it directly.
-
 ## 2.1 Measurement of email transport security
 
-**Durumeric et al. (IMC 2015)** is the canonical study. Combining a snapshot of SMTP configuration for the
-Alexa top million with over a year of Gmail connection logs, it established the global adoption rates of
-STARTTLS, SPF, DKIM and DMARC, and — uniquely — presented evidence of attacks in the wild rather than only of
-weak configuration. Its two attack findings are the intellectual basis of our attack-evidence detectors:
-STARTTLS capability stripping, where a network device rewrites the server's EHLO response so that the
-capability is no longer advertised (the dominant observed style being a same-length substitution consistent
-with a commercial appliance's documented behaviour), and DNS-based MX hijacking, with 14,600 publicly
-accessible resolvers in 521 autonomous systems returning fraudulent MX records for major providers.
+**Durumeric et al. (IMC 2015)** is the canonical study, combining a snapshot of SMTP configuration for the Alexa
+top million with over a year of Gmail connection logs. Uniquely, it presented evidence of attacks in the wild
+rather than only of weak configuration. Its two attack findings are the intellectual basis of our
+attack-evidence detectors: STARTTLS capability stripping, where a network device rewrites the server's EHLO
+response so the capability is no longer advertised (the dominant observed style being a same-length substitution
+consistent with a commercial appliance's documented behaviour), and DNS-based MX hijacking, with 14,600 publicly
+accessible resolvers in 521 autonomous systems returning fraudulent MX records.
 
-**Mayer et al. (ARES 2016)** provides the certificate and cipher baseline: full-IPv4 coverage of SMTP, POP3 and
-IMAP including legacy ports, 2,115,228 unique leaf certificates analysed, and the observation that securing
-server-to-server mail is inherently harder than securing client-to-server mail. That asymmetry is the empirical
-justification for role-aware severity.
+**Mayer et al. (ARES 2016)** provides the certificate and cipher baseline: full-IPv4 coverage including legacy
+ports, 2,115,228 unique leaf certificates analysed, and the observation that securing server-to-server mail is
+inherently harder than client-to-server. That asymmetry is the empirical justification for role-aware severity.
 
 **Holz et al. (NDSS 2016)** remains the broadest study of TLS across SMTP, IMAP, POP3, XMPP and IRC, and is the
-only one in this set to combine active scanning with passive monitoring — pairing what servers offer with what
-clients actually do. It is the closest methodological antecedent to our work, and the difference is instructive:
-it monitored passively at a research vantage point to characterise an ecosystem, not to serve the operator of a
-specific estate.
+only one in this set to combine active scanning with passive monitoring. It is the closest methodological
+antecedent, and the difference is instructive: it monitored at a research vantage point to characterise an
+ecosystem, not to serve the operator of a specific estate.
 
-**Foster et al. (ACM CCS 2015)** examined provider-based email security end to end, evaluating whether each
-provider supports TLS at each hop and SPF and DKIM on inbound and outbound mail — establishing that security
-properties of a mail path are compositional and that a single weak hop determines the outcome.
+**Foster et al. (ACM CCS 2015)** examined provider-based email security end to end, establishing that the
+security properties of a mail path are compositional and that a single weak hop determines the outcome.
 
 ## 2.2 STARTTLS as a vulnerability class
 
 **Poddebniak et al. (USENIX Security 2021)** is the most important paper for this project. It systematises
-STARTTLS flaws into distinct attack classes — negotiation, buffering, tampering and session — and introduces
-EAST, a semi-automatic toolkit of more than 100 test cases. Beyond the headline counts, two findings shape our
-design. First, the paper states the role asymmetry explicitly: the security implications for submission and
-retrieval are more critical than for transport *because those connections carry user credentials granting
-access to a mailbox archive, not merely individual messages*. Our severity policy is an implementation of that
-sentence. Second, a ten-year-old command injection permitting plaintext insertion remained unfixed in multiple
-servers, and eight new instances were discovered of a bug class that had already received several CVEs —
-evidence that this is a persistent implementation hazard rather than a solved problem.
+STARTTLS flaws into distinct attack classes — negotiation, buffering, tampering, session — and introduces EAST,
+a toolkit of more than 100 test cases. Two findings shape our design. First, it states the role asymmetry
+explicitly: the security implications for submission and retrieval are more critical than for transport
+*because those connections carry user credentials granting access to a mailbox archive, not merely individual
+messages*. Our severity policy implements that sentence. Second, a ten-year-old command injection permitting
+plaintext insertion remained unfixed in multiple servers, and eight new instances were discovered of a bug class
+that had already received several CVEs.
 
 ## 2.3 Certificate validation and the X.509 ecosystem
 
-**Georgiev et al. (ACM CCS 2012)** showed that SSL certificate validation is broken across a wide range of
-non-browser software, and attributed the root cause not to exotic bugs but to badly designed library APIs
-presenting developers with confusing arrays of options. **Brubaker et al. (IEEE S&P 2014)** extended this by
-differential testing with synthesised "frankencerts", uncovering further discrepancies among mainstream
-implementations. Two consequences follow for us: mail software is precisely the class of non-browser software
-these papers describe, which is why certificate findings in mail deserve first-class treatment; and a
-purpose-built parser that allocates nothing, links no native code, and is exercised against certificates
-generated for the purpose is a defensible engineering choice for code that will be pointed at a hostile
+**Georgiev et al. (ACM CCS 2012)** showed SSL certificate validation is broken across a wide range of
+non-browser software, attributing the root cause to badly designed library APIs rather than exotic bugs.
+**Brubaker et al. (IEEE S&P 2014)** extended this by differential testing with synthesised "frankencerts".
+Mail software is precisely the class these papers describe, which is why certificate findings in mail deserve
+first-class treatment; and a purpose-built parser that allocates nothing, links no native code and is exercised
+against certificates generated for the purpose is a defensible choice for code that will be pointed at a hostile
 certificate.
 
 ## 2.4 Authenticated transport: MTA-STS, DANE and TLS reporting
 
-**Ashiq, Fiebig & Chung (IMC 2025)** is the current reference on MTA-STS: 31 months of DNS scans covering over
-87 million domains across four TLDs, with ten further months of component scanning. Adoption rose three- to
-four-fold over the study period and remains at 52,641 `.com` domains (0.07%) and 7,192 `.org` domains (0.12%).
-Of the 68,000 domains publishing a record in the latest snapshot, 29.6% were incorrectly configured and 3.2%
-misconfigured badly enough that a compliant sender would fail to deliver. The authors also surveyed 117 email
-operators: 94.7% were aware of MTA-STS, while 48.8% cited operational complexity as the reason for not
-deploying it, 45.4% preferred DANE, and 26.8% reported difficulty managing policy updates.
+**Ashiq, Fiebig & Chung (IMC 2025)**: 31 months of DNS scans covering over 87 million domains across four TLDs.
+Adoption rose three- to four-fold over the study period and remains at 52,641 `.com` domains (0.07%) and 7,192
+`.org` domains (0.12%). Of the 68,000 domains publishing a record, 29.6% were incorrectly configured and 3.2%
+badly enough that a compliant sender would fail to deliver. Their survey of 117 operators found 94.7% aware of
+MTA-STS, 48.8% citing operational complexity as the reason for not deploying, and 26.8% reporting difficulty
+managing policy updates.
 
-**Lee et al. (USENIX Security 2022)** performs the equivalent analysis for DANE in SMTP across more than a
-million domains with TLSA records: over 30% of TLSA records could not be validated owing to a broken DNSSEC
-chain, 3.6% did not match the corresponding certificate, and more than 87% of SMTP servers performed key
-rollovers incorrectly. The authors attribute this directly to the absence of automated tooling for key
-management.
+**Lee et al. (USENIX Security 2022)** performs the equivalent analysis for DANE across more than a million
+domains with TLSA records: over 30% could not be validated owing to a broken DNSSEC chain, 3.6% did not match
+the corresponding certificate, and more than 87% of servers performed key rollovers incorrectly. The authors
+attribute this directly to the absence of automated tooling.
 
-Taken together these two papers make an unusual argument in our favour: the standards that would close the
-opportunistic-encryption gap exist, operators know about them, and the binding constraint is tooling.
+Together these make an unusual argument in our favour: the standards exist, operators know about them, and the
+binding constraint is tooling.
 
 ## 2.5 Machine learning on encrypted traffic
 
-**Sommer & Paxson (IEEE S&P 2010)** is the governing methodological reference. Its argument is that intrusion
-detection differs from other machine-learning applications in ways that defeat naive application: the base-rate
-problem means that where benign traffic dominates, even a small false-positive rate yields an unusable alert
-volume; the semantic gap means an alert an operator cannot trace to a cause is an alert they will not act on;
-and adversarial adaptation and distribution shift undermine closed-world assumptions. Our architecture is a
-direct response — cryptographic facts are produced deterministically, learning is confined to ranking and
-anomaly scoring, and every output is traceable to bytes.
+**Sommer & Paxson (IEEE S&P 2010)** is the governing methodological reference. Intrusion detection differs from
+other machine-learning applications in ways that defeat naive application: the base-rate problem means that where
+benign traffic dominates, even a small false-positive rate yields an unusable alert volume; the semantic gap
+means an alert an operator cannot trace to a cause is one they will not act on; and adversarial adaptation
+undermines closed-world assumptions. Our architecture is a direct response — cryptographic facts are produced
+deterministically, learning is confined to ranking and anomaly scoring, and every output is traceable to bytes.
 
-**Anderson, Paul & McGrew (2018)** established that TLS metadata alone, without decryption, is sufficient to
-distinguish malicious from enterprise traffic across millions of flows and to attribute malware family from a
-single encrypted flow across 18 families. **Jafari Siavoshani et al. (Soft Computing 2023)** applied
-interpretability methods to TLS fingerprinting and identified which handshake fields carry the discriminative
-signal; our 51-field feature vector is shaped by that result. **Singh, Kashyap & Cherukuri (2025)** combined
-XGBoost, Random Forest and Isolation Forest with SHAP attribution across CIC-Darknet2020, USTC-TFC2016 and
-CSE-CIC-IDS2018, reporting 99.94% accuracy for XGBoost (90.9% precision, 88.2% recall, 93.0% F1) against 97.92%
-for Random Forest, and argued that post-hoc interpretability is a compliance requirement rather than a
-convenience. **INTACT (2026)** reframes cryptographic violation detection as a policy-constraint problem —
-modelling the probability of violation conditioned on both observed behaviour and *declared security intent*,
-covering key reuse, downgrade prevention and bounded key lifetimes — and reports AUROC up to 1.0000 on a real
-flow dataset alongside a 210,000-trace synthetic multi-intent corpus. That framing is the closest published
-analogue to our rule-plus-role-policy engine.
+**Anderson, Paul & McGrew (2018)** established that TLS metadata alone, without decryption, distinguishes
+malicious from enterprise traffic across millions of flows and attributes malware family from a single encrypted
+flow across 18 families. **Jafari Siavoshani et al. (Soft Computing 2023)** identified which handshake fields
+carry the discriminative signal; our 51-field vector is shaped by that result. **Singh, Kashyap & Cherukuri
+(2025)** combined XGBoost, Random Forest and Isolation Forest with SHAP attribution across CIC-Darknet2020,
+USTC-TFC2016 and CSE-CIC-IDS2018, reporting 99.94% accuracy for XGBoost (90.9% precision, 88.2% recall, 93.0%
+F1) against 97.92% for Random Forest, and argued post-hoc interpretability is a compliance requirement.
+**INTACT (2026)** reframes cryptographic violation detection as a policy-constraint problem — modelling
+violation probability conditioned on observed behaviour *and declared security intent*, covering key reuse,
+downgrade prevention and bounded key lifetimes — reporting AUROC up to 1.0000 on a real flow dataset alongside a
+210,000-trace synthetic corpus. That framing is the closest published analogue to our rule-plus-role-policy
+engine.
+
+**Friedman (2001)** on gradient boosting and **Liu, Ting & Zhou (ICDM 2008)** on isolation forests are the
+primary sources for the two algorithms we implemented from scratch (§5).
 
 ## 2.6 Post-quantum readiness
 
-**Loizou & Ghadafi (2026)** is the single most relevant recent measurement for this project because it is the
-only study to measure HTTPS and SMTP STARTTLS endpoints for the same organisations. Across 4,665 UK
-organisations in ten sectors, 44.0% of reachable HTTPS services supported at least one evaluated post-quantum
-key-exchange group against **6.4% of SMTP services** — a matched odds ratio of 16.89 — with only 144
-organisations supporting PQC across both web and email, and no post-quantum certificate signatures observed
-anywhere. The authors further find that infrastructure-provider identity predicts deployment better than
-organisational sector, and caution that observable deployment should not be read as organisational readiness.
+**Loizou & Ghadafi (2026)** is the most relevant recent measurement because it is the only study to measure
+HTTPS and SMTP STARTTLS endpoints for the same organisations. Across 4,665 UK organisations, 44.0% of reachable
+HTTPS services supported at least one evaluated post-quantum key-exchange group against **6.4% of SMTP
+services** — a matched odds ratio of 16.89 — with only 144 organisations supporting PQC across both, and no
+post-quantum certificate signatures observed anywhere.
 
-Complementary studies agree on the shape: arXiv 2606.16473 finds 49.3% of 32,011 domains supporting hybrid
-post-quantum key exchange with 0% adoption of post-quantum certificates and 15.7% still on TLS 1.2, notably in
-banking and government; and arXiv 2607.29005, analysing more than two billion handshakes across a million
-domains from eleven vantage points, finds adoption concentrated in a single hybrid construction
-(X25519MLKEM768), driven overwhelmingly by managed infrastructure providers, with owner-managed and
-government-operated domains still defaulting to classical cryptography.
+Complementary studies agree: arXiv 2606.16473 finds 49.3% of 32,011 domains supporting hybrid post-quantum key
+exchange with 0% PQ certificates and 15.7% still on TLS 1.2, notably in banking and government; arXiv 2607.29005,
+analysing more than two billion handshakes from eleven vantage points, finds adoption concentrated in a single
+hybrid construction (X25519MLKEM768), driven overwhelmingly by managed infrastructure providers, with
+owner-managed and government-operated domains still defaulting to classical cryptography.
 
 ## 2.7 Notification and remediation effectiveness
 
-**Li et al. (USENIX Security 2016)** ran a randomised experiment notifying thousands of operators of
-vulnerabilities in their networks and tracking remediation over several weeks. Notifications containing
-remediation steps were 56.5% more effective than terse notifications after two days for the IPv6 condition and
-55.5% for the industrial-control condition — although the authors note that these differences are not
+**Li et al. (USENIX Security 2016)** ran a randomised experiment notifying thousands of operators and tracking
+remediation. Notifications containing remediation steps were 56.5% more effective than terse ones after two days
+for the IPv6 condition and 55.5% for industrial control — although the authors note these differences are not
 statistically significant after Bonferroni correction, and that fewer than 40% of operators who read the
-detailed material fixed anything. Prior work they cite found notified operators patching at a rate almost 50%
-greater than controls. The honest reading, which we adopt, is that actionable specificity helps materially but
-that most findings still go unremediated, which is an argument for prioritisation as much as for clarity.
+detailed material fixed anything. The honest reading, which we adopt, is that actionable specificity helps
+materially but most findings still go unremediated, which argues for prioritisation as much as for clarity.
 
 ## 2.8 Gaps in current research
 
-Three gaps follow from the above, and the contribution of this work is to close them.
+**Gap 1 — the operator's own traffic is unexamined.** Every large-scale study measures the ecosystem from
+outside: Durumeric and Mayer by scanning the address space, Ashiq and Lee by scanning DNS, Loizou by probing
+endpoints, Foster by sending test mail. Holz alone monitored passively, at a single research vantage point. The
+question an operator or incident responder actually has — *what happened on my network, and was it tampered
+with* — has no corresponding instrument. Active scanners cannot answer it in principle, because the evidence is
+historical.
 
-**Gap 1 — the operator's own traffic is unexamined.** Every large-scale study of email transport security
-measures the ecosystem from the outside: Durumeric and Mayer by scanning the address space, Ashiq and Lee by
-scanning DNS, Loizou by probing endpoints, Foster by sending and receiving test mail. Holz alone monitored
-passively, at a single research vantage point, to characterise the ecosystem. The question an operator or an
-incident responder actually has — *what happened on my network, and was it tampered with* — has no
-corresponding instrument. Active scanners cannot answer it in principle, because the evidence is historical.
-
-**Gap 2 — severity models are protocol-agnostic where the threat model is not.** The literature is explicit
-that the security requirements of relay, submission and access differ, and that the difference is about whether
-credentials cross the link. No assessment tool encodes this. The consequence is predicted by Sommer & Paxson:
-alarm volumes that operators learn to ignore.
+**Gap 2 — severity models are protocol-agnostic where the threat model is not.** The literature is explicit that
+the requirements of relay, submission and access differ, and that the difference is about whether credentials
+cross the link. No assessment tool encodes this. The consequence is predicted by Sommer & Paxson: alarm volumes
+operators learn to ignore.
 
 **Gap 3 — the post-quantum discovery problem excludes mail.** Regulatory roadmaps in India, the UK and the US
-begin with cryptographic inventory. The measurement literature shows mail is where the migration has least
-progressed. Commercial discovery tooling — IBM Quantum Safe Explorer, SandboxAQ AQtive Guard, Keyfactor
-AgileSec — operates on source code, container images or host agents. None derives an inventory from observed
-mail traffic.
+begin with cryptographic inventory. Measurement shows mail is where migration has least progressed. Commercial
+discovery tooling — IBM Quantum Safe Explorer, SandboxAQ AQtive Guard, Keyfactor AgileSec — operates on source
+code, container images or host agents. None derives an inventory from observed mail traffic.
 
 ---
 
@@ -364,27 +338,31 @@ mail traffic.
 
 ## 3.1 Design principles
 
-Eighteen architecture decision records are maintained in `docs/04_DECISIONS.md`. Five principles govern the
+Thirty-two architecture decision records are maintained in `docs/04_DECISIONS.md`. Six principles govern the
 design.
 
-1. **The schema is the contract.** The `schema/` package has zero dependencies and generates both JSON Schema
-   and TypeScript definitions (ADR-0009). Six people working in parallel across twelve stages requires one
-   authoritative data model; a change to a field changes the architecture document in the same commit.
-2. **Evidence is designed in, not added later.** Every finding carries its provenance from the moment it is
-   created (ADR-0004). Byte-to-frame mapping must be preserved through reassembly, which is cheap to do at
-   the point of reassembly and impractical to reconstruct afterwards.
+1. **The schema is the contract.** `schema/` has zero dependencies and generates both JSON Schema and TypeScript
+   definitions (ADR-0009). Six people working in parallel across eleven stages requires one authoritative data
+   model; a change to a field changes the architecture document in the same commit.
+2. **Evidence is designed in, not added later.** Every finding carries provenance from the moment it is created
+   (ADR-0004). Byte-to-frame mapping is cheap at the point of reassembly and impractical to reconstruct
+   afterwards.
 3. **Facts are deterministic.** A cryptographic property is parsed, not predicted. Machine learning is confined
    to prioritisation and anomaly scoring, for the reasons Sommer & Paxson set out.
 4. **Absence of evidence is reported as such.** A host whose handshake could not be parsed is graded `?`
-   (ADR-0014). No verdict is upgraded to a pass by default.
-5. **No compiled dependencies.** Forced by the development environment, retained because it is the correct
-   property for the deployment target. The tool must install where there is no package manager and no network.
+   (ADR-0014). No verdict is upgraded to a pass by default. An undecodable capture grades `?`, never A+
+   (ADR-0027).
+5. **Negative results are deliverables.** The attack matrix is worth more for what it rules out than for what it
+   confirms (ADR-0030); drift refuses to compare estates that are not the same estate (ADR-0029); generated
+   prose is discarded whole if it names anything not in the facts (ADR-0028).
+6. **No compiled dependencies.** Forced by the environment, retained because it is correct for the deployment
+   target. The tool must install where there is no package manager and no network.
 
-## 3.2 The twelve-stage pipeline
+## 3.2 The pipeline
 
 | Stage | Name | Function |
 |---|---|---|
-| S0 | Ingest | Read PCAP/PCAPNG, compute capture SHA-256, index frames |
+| S0 | Ingest | Read PCAP/PCAPNG, decode seven link-layer encapsulations, compute capture SHA-256, index frames |
 | S1 | TCP reassembly | Rebuild bidirectional streams with a byte-to-frame provenance map |
 | S2 | Protocol identification | Identify SMTP/IMAP/POP3 from banner and command grammar; assign port role |
 | S3 | STARTTLS state machine | Ten checks over the plaintext negotiation phase |
@@ -392,155 +370,377 @@ design.
 | S5 | X.509 | Parse DER certificates, build chains, verify RSA signatures, validate names and dates |
 | S6 | Rule evaluation | 34 rules across ten categories, each with standards citation and remediation |
 | S7 | Feature extraction | 51 fields per session |
-| S8 | AI layer | Risk classification, anomaly detection against a fleet baseline, priority ordering |
-| S9 | Aggregation | Per-category, per-host and fleet scores and grades; capping rules |
-| S10 | Reporting | JSON, self-contained HTML dashboard, PDF |
+| S8 | AI layer | Gradient-boosted risk model, isolation-forest anomaly detection, priority ordering, grounded narrative |
+| S9 | Aggregation | Per-category, per-host and fleet scores and grades; capping rules; attack matrix; drift |
+| S10 | Reporting | JSON, self-contained HTML, CEF/ECS, twelve-view console |
 
 ## 3.3 Component layers
 
-| Package | Stages | Responsibility |
+| Package | Stage | Responsibility |
 |---|---|---|
 | `schema/` | — | The data contract; zero dependencies; generates JSON Schema and TypeScript |
-| `securemailscope/capture/` | S0–S1 | PCAP ingest and the TCP reassembler with provenance |
+| `schema/platform.py` | — | Jobs, dispositions, audit events, posture snapshots (ADR-0022) |
+| `securemailscope/capture/` | S0–S1 | Link-layer decode (ADR-0027) and the TCP reassembler with provenance |
 | `securemailscope/proto/` | S2–S3 | Protocol identification, STARTTLS state machine, credential recovery |
 | `securemailscope/tls/` | S4 | TLS record and handshake parser, fingerprints, post-quantum group detection |
 | `securemailscope/certs/` | S5 | DER/X.509 parser and RSA signature verification |
 | `securemailscope/rules/` | S6 | Rule pack, standards catalogue, role-aware severity policy |
 | `securemailscope/features/` | S7 | The 51-field feature vector |
-| `securemailscope/ml/` | S8 | Classifier, anomaly detector, priority model, corpus generator, training |
-| `securemailscope/report/` | S10 | JSON, HTML and PDF emitters from a single `Report` object |
+| `securemailscope/ml/` | S8 | `gbt.py`, `iforest.py`, classifier, anomaly, priority, corpus (ADR-0031) |
+| `securemailscope/llm/` | S8 | Grounded fact sheet, deterministic template, hallucination verifier (ADR-0028) |
+| `securemailscope/attacks.py` | S9 | Attack feasibility matrix, 16 attacks, three verdicts (ADR-0030) |
+| `securemailscope/drift.py` | S9 | Temporal posture comparison (ADR-0029) |
+| `securemailscope/report/` | S10 | JSON and self-contained HTML |
+| `securemailscope/siem.py` | S10 | CEF and ECS export |
+| `securemailscope/store.py` | — | stdlib `sqlite3`, five tables, no ORM |
+| `securemailscope/api/` | — | Flask service, stdlib auth (ADR-0024), twelve-view console (ADR-0026) |
 | `testbed/` | — | `synth.py` writes PCAPs byte by byte; `certgen.py` issues signed certificates |
 
 ## 3.4 Data model
 
-The report object is a closed hierarchy: a `capture` record (path, SHA-256, frame count, time bounds); a list
-of `sessions`, each with protocol, port, port role, TLS mode, handshake detail, certificate chain, feature
-vector and findings; a list of `hosts` with per-category scores and a grade; a `fleet` rollup; a
-`prioritised_findings` queue; an `executive_summary`; and an `evaluation_metrics` block reserved for measured
-accuracy.
+The report is a closed hierarchy: a `capture` record (path, SHA-256, frame count, time bounds); `sessions`, each
+with protocol, port, port role, TLS mode, handshake detail, certificate chain, feature vector and findings;
+`hosts` with per-category scores and a grade; a `fleet` rollup; `prioritised_findings`; an `executive_summary`;
+and `evaluation_metrics`.
 
-Enumerations are fixed and small, which is what makes the contract enforceable: ten finding categories
-(`protocol`, `cipher`, `key_exchange`, `certificate`, `certificate_strength`, `configuration`, `starttls`,
-`attack_evidence`, `post_quantum`, `compliance`); four port roles (`mta_relay`, `submission`, `mail_access`,
-`unknown`); five severities (`info`, `low`, `medium`, `high`, `critical`); and eight grades (`A+`, `A`, `B`,
-`C`, `D`, `E`, `F`, `?`).
+Enumerations are fixed and small, which makes the contract enforceable: ten finding categories (`protocol`,
+`cipher`, `key_exchange`, `certificate`, `certificate_strength`, `configuration`, `starttls`, `attack_evidence`,
+`post_quantum`, `compliance`); four port roles (`mta_relay`, `submission`, `mail_access`, `unknown`); five
+severities; and eight grades (`A+`, `A`, `B`, `C`, `D`, `E`, `F`, `?`).
 
 ## 3.5 The evidence model
 
-An `Evidence` record accompanies every finding and holds the capture SHA-256, the stream index, the frame
-numbers involved, the byte offsets within the reassembled stream, and a human-readable note. This is what makes
-a finding checkable: the report states a claim, and the claim names the bytes that support it. Section 9.3
-discusses the legal consequences.
+An `Evidence` record accompanies every finding, holding capture SHA-256, stream id, frame numbers, byte range,
+direction, timestamp and a human-readable note. A report states a claim, and the claim names the bytes that
+support it.
 
 ---
 
-# 4. Testing and Validation Methodology
+# 4. Detailed Technical Implementation
 
-## 4.1 The test suite
+## 4.1 Link-layer decoding and ingest (S0)
 
-168 tests pass, organised into six modules — `contract`, `ml`, `parsing`, `tls`, `certs`, `report` — and run
-without pytest so that testing does not itself introduce a dependency:
+Seven encapsulations are decoded: Ethernet, 802.1Q and QinQ VLAN tags, Linux cooked capture v1 and v2, raw IPv4
+and IPv6, BSD loopback, and the IPv6 extension-header chain. This was not cosmetic work. Before ADR-0027, five
+of seven encapsulations lost *every frame* and the tool reported a clean A+ on a capture it had entirely failed
+to read. An undecodable capture now grades `?`.
 
-```
-for t in contract ml parsing tls certs report; do python tests/test_$t.py; done
-```
+## 4.2 TCP reassembly with provenance (S1)
 
-Coverage is structured by risk. The `contract` tests assert that the schema round-trips and that JSON Schema
-generation matches the dataclasses. The `certs` tests verify RSA signature validation against certificates
-generated by `testbed/certgen.py`, including deliberately invalid chains. The `parsing` and `tls` tests exercise
-truncated records, malformed lengths and incomplete handshakes — the paths a hostile input would take. The
-`report` tests assert that HTML output contains no external references and that injected markup never reaches
-the document body.
+Streams are rebuilt per direction with sequence-number ordering, retransmission and overlap handling, and a
+provenance structure mapping every byte offset in the reassembled stream to its source frame. Findings cite
+offsets into this stream; the map converts them into frame numbers an analyst can open in Wireshark. Incomplete
+streams are retained and marked rather than discarded, because a truncated capture is the normal case in
+forensic work.
 
-## 4.2 The synthetic corpus and ground truth
+## 4.3 Protocol identification (S2)
+
+Identification is banner-led. The server greeting and subsequent command grammar determine whether a stream is
+SMTP, IMAP or POP3; the port is recorded and used to assign a role but is not trusted to identify the protocol.
+Dreger et al. established the principle in 2006: traffic on non-standard ports is disproportionately interesting
+precisely because avoiding a standard port is itself a way of evading inspection. **Measured protocol
+identification accuracy against ground truth: 1.00.**
+
+## 4.4 The STARTTLS state machine (S3)
+
+Ten checks over the plaintext phase, structured around the published attack classes: whether the capability was
+advertised; whether it was advertised then unused; whether the advertised set is internally consistent with the
+observed negotiation; whether EHLO was correctly re-issued after the upgrade (RFC 3207 §4.2); whether plaintext
+AUTH was offered before TLS (RFC 4954); whether the capability line shows the same-length rewrite signature;
+whether the server rejected the command; whether the session continued in plaintext after a failed upgrade;
+whether credentials appeared before the upgrade; and whether the transition boundary is consistent with the
+record layer that follows.
+
+## 4.5 TLS handshake parsing (S4)
+
+A record-layer parser feeds a handshake parser extracting ClientHello and ServerHello, offered and selected
+cipher suites, supported groups and key shares, extensions, ALPN, SNI, session resumption indicators and alerts.
+JA3 and JA3S fingerprints are computed from the ordered field sets. Post-quantum readiness is determined from
+named groups — hybrid constructions such as X25519MLKEM768 — recorded separately for *offered* and *negotiated*,
+because those are different facts. Version downgrade is detected both by comparing offered against negotiated
+and by testing for the RFC 8446 sentinel. Cipher suite properties are derived from IANA names rather than
+tabulated (ADR-0015), so a suite we have never seen is still classified correctly.
+
+## 4.6 DER and X.509 (S5)
+
+A DER reader with explicit length and tag validation, an X.509 structure decoder, chain construction against a
+supplied trust anchor, and RSA PKCS#1 v1.5 signature verification implemented over Python integers. Validity
+windows, self-signature, key size, signature hash algorithm, chain completeness and name matching are all
+evaluated. Where the certificate is encrypted by TLS 1.3, the chain is recorded as `OPAQUE_TLS13` rather than
+absent. Certificate findings are split into *trust* and *strength* (ADR-0010), because an expired certificate
+and a 1024-bit key are different problems with different fixes.
+
+## 4.7 The rule engine and severity policy (S6)
+
+Each rule is a frozen dataclass: identifier, title, category, base severity, predicate, description, standards
+tuple, related attacks, remediation block and evidence note. Predicates are functions of a narrow `RuleContext`
+— the feature vector plus host, port and role — and a rule that raises is treated as not firing, so a defect in
+one rule cannot abort a run.
+
+The narrow context is a deliberate consequence of ADR-0003: because rules are predicates over the feature vector
+rather than over parsed session objects, the *same* rule implementations run over real sessions and over
+synthetic feature vectors. The labelling oracle used to generate training data therefore cannot drift from the
+shipping detector.
+
+Severity is emitted as a base value and then adjusted by a policy table keyed on `(category, role)`, with the
+adjustment and its plain-English justification recorded on the finding.
+
+## 4.8 Aggregation and grading (S9)
+
+Per-category scores aggregate to a host score and grade; host grades aggregate to a fleet score and grade.
+Thresholds are 95 for A+, 85 for A, 75 for B and downwards. Two capping rules matter: a critical finding caps
+the achievable grade regardless of arithmetic, and any host with an incomplete handshake analysis that would
+otherwise grade A+, A or B is reassigned `?`.
+
+---
+
+# 5. The Machine Learning Layer
+
+This section is given in full because it is the part of the system most often asserted and least often
+demonstrated. Everything below was produced by running `python scripts/train_local.py`.
+
+## 5.1 Why we wrote the algorithms ourselves
+
+The problem statement names XGBoost and Isolation Forest. Neither can be installed on these machines: Windows
+Smart App Control blocks `numpy`'s compiled `_multiarray_umath` extension, and scikit-learn and XGBoost both
+depend on it (ADR-0012). The project initially planned to train off-machine in Colab (ADR-0020). That left a
+deliverable dependent on a human remembering to run a notebook, which ADR-0031 identified as the wrong kind of
+dependency for a system that must be demonstrable on demand.
+
+Both algorithms were therefore implemented from scratch in pure Python: `securemailscope/ml/gbt.py` (390 lines)
+and `securemailscope/ml/iforest.py` (182 lines). Training the complete pipeline takes **under fifteen seconds**
+on an ordinary laptop with no GPU, no numerical library and no network.
+
+## 5.2 The training corpus
+
+`securemailscope/ml/corpus.py` generates **10,000 rows across 55 columns**. Rows are synthetic feature vectors,
+not parsed captures — ADR-0006 separates these deliberately: the model trains on synthetic vectors, PCAPs are
+reserved for validation and demonstration, so the two never contaminate each other.
+
+Labels come from the rule engine (ADR-0003). This is the single most important design property of the layer:
+the labelling oracle is literally the same code that ships as the detector, so the model cannot learn a
+different notion of risk from the one the product enforces.
+
+**One column is deliberately excluded. `archetype` — the generator's latent variable describing which scenario
+it was drawing from — is dropped as leakage.** A model given it would predict risk almost perfectly and learn
+nothing, because the generator's intent is not available at inference time. The trainer removes it explicitly
+and reports the exclusion.
+
+The split is **8,000 training rows and 2,000 held out**, with indices shuffled together before splitting
+(ADR-0020). That ADR exists because of a bug found by running: `train_test_split` shuffles by default, and an
+earlier version scored the model on rows it had trained on.
+
+## 5.3 The risk model: gradient-boosted regression trees
+
+An ensemble of **200 regression trees at depth 3**, trained by gradient boosting in the sense of Friedman
+(2001): each tree is fitted to the residuals of the ensemble so far, and predictions are the sum of the
+ensemble's outputs.
+
+Training converges smoothly — train MAE falls 0.1015 → 0.0696 → 0.0565 → 0.0502 → 0.0477 → 0.0455 → 0.0431 →
+0.0423 at rounds 25 through 200 — and completes in **12.0 seconds**.
+
+### Measured results on the 2,000 held-out rows
+
+| Metric | Value | Meaning |
+|---|---|---|
+| **Baseline MAE** | **0.1681** | The rule-derived score, i.e. what the system outputs with no model at all |
+| **Model MAE** | **0.0451** | Mean absolute error of the trained ensemble |
+| **Improvement** | **0.1230 (73%)** | How much the model beats the baseline it must justify itself against |
+| **R²** | **0.9429** | Variance explained |
+| **Spearman ρ** | **0.9225** | Rank correlation — *the figure that matters for a triage queue* |
+
+Spearman is quoted deliberately. A triage queue is an ordering problem, not a regression problem: what matters
+is whether the right finding is at the top, not whether its score is 0.81 or 0.84.
+
+**The trainer refuses to write a model that loses to the baseline.** If the ensemble fails to beat the
+rule-derived score on held-out data, no model file is produced and the system continues on the baseline. A model
+worse than no model should not ship, and the check is mechanical rather than a matter of discipline.
+
+### Feature importances
+
+The eight most-used features, by split frequency weighted by gain:
+
+| Weight | Feature | Interpretation |
+|---|---|---|
+| 0.115 | `kex_group_bits` | Key-exchange strength dominates |
+| 0.101 | `cert_days_to_expiry` | Certificate lifecycle is the next strongest signal |
+| 0.053 | `starttls_stripped_suspected` | Attack evidence carries weight, as it should |
+| 0.052 | `cert_chain_complete` | Chain construction |
+| 0.050 | `downgrade_sentinel_present` | RFC 8446 sentinel |
+| 0.045 | `cipher_intersection_anomaly` | The corroborated anomaly (ADR-0023) |
+| 0.042 | `cert_hostname_match` | Name validation |
+| 0.040 | `auth_before_tls` | Plaintext AUTH exposure |
+
+This distribution is itself a result worth reporting: the model independently concentrates on key-exchange
+strength and certificate lifecycle, which is where the measurement literature says the weaknesses actually are,
+and it gives real weight to the attack-evidence features rather than treating them as rare noise.
+
+## 5.4 Anomaly detection: isolation forest
+
+**150 trees over 256-row subsamples**, following Liu, Ting & Zhou (2008): anomalies are easier to isolate, so
+the expected path length to isolate a point is shorter for outliers. Training takes **2.4 seconds**.
+
+The decision threshold is **0.5856**, flagging **99 of 2,000 held-out rows (5.0%)**. That rate is a deliberate
+operational choice rather than a statistical one — it is the volume a human triage queue can absorb.
+
+**The baseline rejects contaminated sessions before learning (ADR-0019).** An earlier version built the fleet
+baseline from the capture *including its attack sessions*, which let the attacks vote on what counted as normal
+— so the more compromised an estate was, the less anomalous its compromise appeared. The baseline is now built
+in two passes with outliers rejected before the second.
+
+## 5.5 The narrative layer: verified, not trusted (ADR-0028)
+
+Three components: `grounding.py` builds a `FactSheet` from the report — a closed vocabulary of every host, rule
+identifier, standard, CVE and attack name that legitimately appears; `templates.py` renders a deterministic
+narrative that ships by default and needs no network; `verify.py` exposes `check()` and `verdict()`, which
+compare generated prose against the fact sheet and **discard the text whole** if it names any host, rule, RFC or
+CVE not present in the facts.
+
+This is the answer to "how do you stop it hallucinating?" — a mechanical closed-vocabulary check rather than a
+prompt instruction. The deterministic template means the demonstration never requires a network call, and the
+verifier means that if a language model is attached, its output is still gated by the report's own facts.
+
+## 5.6 The analyst feedback loop
+
+Dispositions marked `FALSE_POSITIVE` in the console are served at `/api/training-signal` as labelled examples.
+Triage work therefore becomes supervised signal rather than evaporating — the one data source in this domain
+that is both genuinely labelled and genuinely free.
+
+---
+
+# 6. Testing, Evaluation and Measured Results
+
+## 6.1 The test suite
+
+**277 tests pass**, in twelve modules — `contract`, `ml`, `gbt`, `parsing`, `tls`, `certs`, `report`,
+`platform`, `linklayer`, `llm`, `drift`, `attacks` — run without pytest so that testing introduces no
+dependency.
+
+Coverage is structured by risk. `contract` asserts the schema round-trips and that generated JSON Schema matches
+the dataclasses. `certs` verifies RSA signature validation against certificates from `testbed/certgen.py`,
+including deliberately invalid chains. `parsing`, `tls` and `linklayer` exercise truncated records, malformed
+lengths and incomplete handshakes — the paths a hostile input would take. `report` asserts the HTML contains no
+external references and that injected markup never reaches the document body.
+
+## 6.2 Ground truth, and how it was authored
 
 `testbed/synth.py` writes PCAP files byte by byte rather than capturing traffic, which is what makes ground
 truth possible: the generator knows exactly which weaknesses it encoded. `testbed/certgen.py` issues genuinely
 signed certificates from a generated CA, including expired, self-signed, weak-key and mismatched-name variants.
-`testbed/manifest.json` declares the expected findings for each of 18 captures.
+`testbed/relink.py` re-encapsulates the corpus into seven link-layer variants.
 
-This is a deliberate response to a gap. No public corpus exists of mail sessions labelled with cryptographic
-weaknesses. The intrusion-detection corpora that exist — CIC-IDS2017 and CSE-CIC-IDS2018, UNSW-NB15, the
-Stratosphere and CTU malware captures — are built for attack classification; several, including MAWI, contain
-packet headers only and therefore cannot exercise a certificate parser at all.
+**Expectations in `testbed/manifest.json` were derived by reading `testbed/synth.py`, never from the tool's
+output.** This is the methodological point on which the entire evaluation rests. If ground truth is copied from
+what the tool produced, precision becomes 1.0 by construction and the figure means nothing.
 
-## 4.3 Evaluation methodology
+## 6.3 Measured accuracy
 
-The evaluation design is a per-rule comparison between declared and produced findings across the corpus,
-yielding precision, recall and F1 per rule and in aggregate, with a fourth outcome class for cases where a rule
-could not fire because the required evidence was encrypted. Those are counted as *insufficient evidence*, not
-as misses, because counting them as misses would penalise the system for being honest about TLS 1.3.
+Produced by `python scripts/evaluate.py` on the date of writing:
 
-**Status, stated plainly: `scripts/evaluate.py` is currently a stub that raises `NotImplementedError`.** The
-manifest declares expected findings and the pipeline produces actual findings, so the remaining work is the
-comparison loop. Until it is run, this paper reports no accuracy figures, and the claim that the system's
-precision and recall are known is not made. Section 16.1 lists this as the first item of future work for that
-reason.
+| Measure | Result |
+|---|---|
+| Captures matching ground truth exactly | **14 / 14** |
+| Rules exercised without error | **20 / 20** |
+| True positives | **30** |
+| False positives | **0** |
+| False negatives | **0** |
+| Precision | **1.00** |
+| Recall | **1.00** |
+| F1 | **1.00** |
+| Severity accuracy (role-aware adjustment, USP-01) | **1.00** |
+| Protocol identification accuracy | **1.00** |
+| Throughput | 0.05 MB/s |
 
-When the numbers exist they must be reported with their scope: a synthetic corpus measures *implementation
-correctness against declared intent*, not field accuracy. Field accuracy would require labelled real-world
-captures, which do not publicly exist.
+Per-rule results are uniform across all 20 rules exercised, including all five attack detectors
+(`ATTACK-STARTTLS-STRIPPED`, `ATTACK-CLEARTEXT-CREDENTIALS`, `ATTACK-DOWNGRADE-SENTINEL`,
+`ATTACK-CIPHER-INTERSECTION-ANOMALY`, `ATTACK-CERT-SUBSTITUTION`).
 
-## 4.4 Independent cross-validation
+**How this must be quoted.** The audit script states the required framing itself, and we repeat it: this is *"no
+disagreement with independently-derived ground truth on a synthetic corpus"*, **not** perfection. The corpus is
+ours. The result measures implementation correctness against declared intent — that every rule fires when and
+only when the generator encoded the condition it detects. It does not measure field accuracy, which would
+require labelled real-world captures that do not publicly exist. Anyone quoting 1.00 without that sentence is
+overclaiming, and an evaluator will say so.
 
-Because our TLS and X.509 parsers are our own, a second opinion is necessary. The intended method is to run
-`tshark` over the same capture and compare the extracted protocol version, cipher suite, certificate subject,
-issuer, validity dates and public-key parameters field by field. Disagreement indicates a parser defect in one
-implementation or the other; agreement across an 18-capture corpus is meaningful evidence that the parse is
-correct. This is stronger than self-consistency testing and weaker than formal verification, which is the
-correct level of assurance for the claim being made.
+**Throughput of 0.05 MB/s is a real limitation** and is reported rather than omitted. It is the price of a pure
+Python implementation with no compiled dependencies: acceptable for forensic analysis of bounded captures,
+unsuitable for line-rate monitoring.
 
-## 4.5 Deliverable verification
+## 6.4 Deliverable verification
 
-`scripts/audit.py` mechanically verifies every deliverable and objective and regenerates `docs/06_STATUS.md`.
-It is run before and after every change, and it has already caught a regression that manual review missed: the
-role-aware severity side-by-side panel silently stopped producing output when the corpus moved from synthetic
-to genuinely signed certificates.
+`scripts/audit.py` mechanically verifies every deliverable and objective. Current state: **32 met, 1 partial, 1
+not met.**
+
+| Status | Items |
+|---|---|
+| **Met (32)** | D01–D19, D21, O01, O02, USP-01 to USP-10 |
+| **Partial (1)** | D20 — PDF export; Playwright is blocked, browser print works with the print stylesheet applied |
+| **Not met (1)** | USP-11 — passive DNS / DANE / MTA-STS correlation; needs DNS extraction from the capture |
+
+The audit has already caught regressions manual review missed: the role-aware severity side-by-side panel
+silently stopped producing output when the corpus moved from synthetic to genuinely signed certificates. The
+evaluation caught a rule reporting every legacy server as under attack, which led to ADR-0023.
+
+## 6.5 Verification from a clean clone
+
+Because the corpus, certificates and models are gitignored build artifacts, a clean `git status` says nothing
+about whether a fresh clone works. Verification is therefore performed from an empty directory:
+
+```
+git clone . /tmp/x && cd /tmp/x && ./run.sh --check     # must print 32 met
+```
+
+The first attempt printed 26: a documented command that silently did nothing, a launcher that reported the
+failure as something reassuring, and an audit missing artifacts nobody had generated.
 
 ---
 
-# 5. User Flows and System Interactions
+# 7. User Flows and System Interactions
 
-## 5.1 The analyst flow
+## 7.1 The analyst flow
 
-1. A capture is obtained from existing infrastructure — a SPAN port, a tap, or an archived capture retained
-   under the CERT-In 180-day requirement. CyberKavach does not capture traffic itself; separating collection
-   from analysis is what allows it to run on a machine that is not on the monitored network.
+1. A capture is obtained from existing infrastructure — a SPAN port, a tap, or an archived capture retained under
+   the CERT-In 180-day requirement. CyberKavach does not capture traffic itself; separating collection from
+   analysis is what lets it run on a machine that is not on the monitored network.
 2. One command: `python scripts/analyse.py capture.pcap --out out/ --trust ca.der`.
-3. The analyst opens `out/report.html` — a single self-contained file — and reads the fleet grade, the
-   executive summary, and the prioritised triage queue.
-4. Any finding expands to show its evidence: capture hash, stream, frames, byte offsets, the standards clause,
-   and the remediation.
+3. The analyst opens `out/report.html` — a single self-contained file — or the console at port 8000.
+4. Any finding expands to show capture hash, stream, frames, byte range, the standards clause and the fix.
 
-## 5.2 The administrator flow
+## 7.2 The administrator flow
 
 The administrator view groups findings by *fix* rather than by finding, because one configuration change
-frequently resolves several findings across several hosts. Each group carries the configuration lines for the
-relevant server software and the clause that justifies the change. The design rationale is empirical:
-remediation tracks how specific and actionable a notice is, and most findings otherwise go unremediated.
+frequently resolves several findings across several hosts. The rationale is empirical: remediation tracks how
+specific and actionable a notice is, and most findings otherwise go unremediated.
 
-## 5.3 The auditor flow
+## 7.3 The auditor flow
 
-The auditor view is a compliance report card mapping observed posture to the clauses of NIST SP 800-52 Rev 2
-and the relevant RFCs, plus an evidence pack. Each row states whether the control was OBSERVED, NOT_FOUND,
-UNKNOWN or INSUFFICIENT_EVIDENCE, which is what distinguishes an audit artefact from a scanner's opinion.
+A compliance report card mapping observed posture to the clauses of NIST SP 800-52 Rev 2 and the relevant RFCs —
+**17 standards tracked, 10 failing** on the demonstration corpus — plus an evidence pack. Each row states
+whether the control was OBSERVED, NOT_FOUND, UNKNOWN or INSUFFICIENT_EVIDENCE. Context-only citations are
+excluded from the failure count, so citing a standard is never counted as violating it.
 
-## 5.4 The incident responder flow
+## 7.4 The incident responder flow
 
-The responder view is a timeline: sessions ordered by time, with attack-evidence findings marked, recovered
-plaintext credentials shown as proof of exposure (redacted by default), and per-session handshake detail. The
-question this view answers is whether interference occurred, when, and against which hosts.
+Sessions ordered by time, attack-evidence findings marked, recovered plaintext credentials shown as proof of
+exposure (redacted by default), per-session handshake detail, and the attack feasibility matrix.
+
+## 7.5 The four persona views
+
+All four — SOC triage, forensics evidence packet, incident-response timeline, and administrator — render from
+**one analysis**, which a test enforces. They are views of the same facts, not four separate analyses that could
+disagree.
 
 ---
 
-# 6. Innovation and Technical Features
+# 8. Innovation and Technical Features
 
-## 6.1 Role-aware severity
+## 8.1 Role-aware severity (USP-01)
 
-Every session is assigned a `port_role` at S2. The severity engine then applies a documented adjustment to the
-base severity a rule emitted, keyed on the pair `(finding category, port role)`, and writes the reasoning into
-the finding itself — for example, *"downgraded from HIGH to INFO: port 25 MTA relay, opportunistic TLS per RFC
-7435."*
+Every session is assigned a `port_role` at S2. The severity engine applies a documented adjustment to the base
+severity, keyed on `(finding category, port role)`, and writes the reasoning into the finding — for example
+*"Downgraded from HIGH to INFO: port 25 is MTA-to-MTA relay, where TLS is opportunistic (RFC 7435) and the
+sender has no trust anchor"*, against *"Raised from HIGH to CRITICAL: user credentials traverse this session, so
+RFC 8314 requires a validated certificate"*.
 
 | Role | Ports | TLS expectation | Certificate validation failure |
 |---|---|---|---|
@@ -548,304 +748,269 @@ the finding itself — for example, *"downgraded from HIGH to INFO: port 25 MTA 
 | `submission` | 587 (STARTTLS), 465 (implicit) | Mandatory (RFC 8314, RFC 4954) | Critical |
 | `mail_access` | 143, 993, 110, 995 | Mandatory (RFC 8314) | Critical |
 
-The justification is not stylistic. Poddebniak et al. state that submission and retrieval are more critical
-because they carry credentials granting mailbox access. Mayer et al. reach the same asymmetry from measurement,
-observing that server-to-server security is inherently harder and that SMTP does not validate certificates by
-default — hence 65% self-signed. And Sommer & Paxson explain the cost of ignoring it: with benign traffic
-dominating, a protocol-agnostic severity model produces an alert stream operators stop reading.
+The justification is the literature's, not ours. Poddebniak et al. state the asymmetry directly; Mayer et al.
+reach it from measurement; Sommer & Paxson explain the cost of ignoring it. **Measured severity accuracy against
+ground truth: 1.00.**
 
-## 6.2 Attack evidence
+## 8.2 Attack evidence (USP-02)
 
-Five detectors report that an attack has occurred rather than that one is possible. All five operate on
-plaintext portions of the session and require no decryption.
+Five detectors report that an attack has occurred rather than that one is possible, all operating on plaintext
+portions of the session with no decryption:
 
-1. **STARTTLS capability stripping** — the advertised capability set is compared against the negotiation that
-   follows, including the same-length substitution pattern documented in the wild.
-2. **Cleartext credentials** — AUTH exchanges recovered from sessions that were never upgraded, reported as
-   proof of exposure and redacted by default.
-3. **The RFC 8446 downgrade sentinel** — the specified ServerHello random suffix that signals a version
-   downgrade.
-4. **Cipher-intersection anomaly** — the server selected a suite weaker than the strongest both parties
-   offered, which requires both halves of the handshake to detect and is therefore invisible to an active
-   scanner.
-5. **Certificate substitution** — the same host presenting different certificates across sessions in one
-   capture.
+1. **STARTTLS capability stripping** — advertised capability set compared against the negotiation that follows,
+   including the same-length substitution pattern documented in the wild.
+2. **Cleartext credentials** — AUTH exchanges recovered from sessions never upgraded, reported as proof of
+   exposure and redacted by default.
+3. **The RFC 8446 downgrade sentinel** — the specified ServerHello random suffix signalling a version downgrade.
+4. **Cipher-intersection anomaly** — the server selected a suite weaker than the strongest both parties offered,
+   requiring both halves of the handshake and therefore invisible to an active scanner.
+5. **Certificate substitution** — the same host presenting different certificates across sessions.
 
-`attack_evidence` is one of the ten scored categories, not an annotation.
+The intersection anomaly **requires corroboration** (ADR-0023). Without it, every legacy server looks like an
+attack — a finding produced by the evaluation harness, not by review.
 
-## 6.3 Evidence-linked findings
+## 8.3 Evidence-linked findings (USP-03)
 
-Every finding carries the capture SHA-256, stream index, frame numbers and byte offsets. This addresses the
-semantic gap identified by Sommer & Paxson — the reason operators discard alerts they cannot trace — and it has
-a second consequence discussed in §9.3: it is the form in which section 63 of the Bharatiya Sakshya Adhiniyam,
-2023 expects electronic evidence to be presented.
+Capture SHA-256, stream id, frame numbers, byte range, direction and timestamp on every finding. This addresses
+the semantic gap Sommer & Paxson identify, and has a legal consequence (§10.3): it is the form section 63 of the
+Bharatiya Sakshya Adhiniyam, 2023 expects of electronic evidence.
 
-## 6.4 Reporting what could not be observed
+## 8.4 Reporting what could not be observed (USP-04)
 
-TLS 1.3 encrypts the Certificate message. A tool that reports "no certificate found" in that situation is
-reporting a parsing limitation as a security fact. CyberKavach reports `OPAQUE_TLS13` with the reason, continues
-to assess what remains visible — negotiated version, key-exchange groups, server fingerprint, requested name —
-and grades the host `?` rather than allowing it to reach A+ or A on the strength of checks that never ran. The
-problem statement requires exactly this discipline; INTACT makes the research case for modelling uncertainty
-explicitly rather than inferring absence.
+TLS 1.3 encrypts the Certificate message. A tool reporting "no certificate found" is reporting a parsing
+limitation as a security fact. CyberKavach reports `OPAQUE_TLS13` with the reason, continues to assess what
+remains visible, and grades the host `?`.
 
-## 6.5 Deployment without dependencies
+## 8.5 The attack feasibility matrix (USP-09, ADR-0030)
 
-One pure-Python runtime dependency (`dpkt`); everything else is the standard library. The TCP reassembler, the
-TLS parser, the DER/X.509 parser with RSA signature verification and the PDF renderer are all written for this
-project. There are no compiled extensions, no container requirement, no model download and no network calls at
-any point. The practical consequence is that the tool installs by file copy on a machine with no internet and
-no package manager, which is the environment the problem statement's originating organisation works in.
+Sixteen named attacks are judged against the observed evidence, with three possible verdicts: **feasible**,
+**not applicable** (ruled out) and **not observable passively**. On the demonstration corpus: **9 feasible, 6
+ruled out, 1 not observable.** Fourteen attack names are also attached to individual findings.
 
-## 6.6 Standards mapping and remediation
+The attacks assessed are STARTTLS stripping, credential interception, server impersonation, RC4 keystream
+biases, Sweet32, FREAK, Logjam, ROBOT/Bleichenbacher, POODLE, BEAST, Lucky 13, CRIME, renegotiation prefix
+injection, retrospective decryption, harvest-now-decrypt-later, and Heartbleed.
 
-Each of the 34 rules carries its standards citation and its remediation inline, authored at the same time as
-the predicate. This produces the compliance report card and the per-finding configuration snippet without a
-separate mapping exercise, and it makes the citation a first-class property of the rule rather than
-documentation that can drift.
+**The ruled-out rows are the deliverable.** A report that lists only what is broken reads identically to a
+report by a tool that never looked for the rest. Stating that Logjam is not applicable *because the observed
+key-exchange group is 2048 bits or larger* is positive assurance an auditor can act on, and no competing tool
+produces it. The third verdict exists because honesty requires distinguishing "we checked and it is not
+possible" from "this cannot be determined from a passive capture".
+
+## 8.6 Temporal posture drift (USP-10, ADR-0029)
+
+Two captures of the same estate are compared: findings that appeared, resolved or carried forward, and hosts
+whose grade moved. On the demonstration pair (`fleet.pcap` vs `fleet_later.pcap`): 100% host overlap, fleet
+grade D→D, **7 appeared, 6 resolved, 23 carried forward, 2 hosts moved**.
+
+The fleet score moved −0.3 while one host fell 99 points and another rose 96 — which is the point. An aggregate
+that barely moves can conceal complete reversals underneath, and drift is what surfaces them.
+
+**Drift refuses to compare estates with under 50% host overlap.** The arithmetic works on any two reports, and a
+confident wrong trend is worse than a blank panel.
+
+## 8.7 Post-quantum readiness (USP-05)
+
+Hybrid key-exchange groups are detected in `supported_groups` and recorded separately for offered and
+negotiated. On the demonstration corpus, one session offered a hybrid group and **1 of 11 hosts is PQ-ready**.
+The claim is deliberately two-part, following the measurement literature: *key exchange is migrating,
+certificates have not started*.
+
+## 8.8 Deployment without dependencies
+
+Three runtime dependencies — `dpkt` for capture parsing, `flask` for the service, `waitress` for production
+serving. The TCP reassembler, TLS parser, DER/X.509 parser, RSA verification, gradient-boosting trainer,
+isolation forest and PDF renderer are all written for this project. No compiled extensions, no container
+requirement, no model download, no network calls. The tool installs by file copy on a machine with no internet
+and no package manager — the environment this problem statement's originating organisation works in.
 
 ---
 
-# 7. Technology Stack and Implementation
+# 9. Technology Stack and Platform Layer
+
+## 9.1 Stack
 
 | Layer | Choice | Rationale |
 |---|---|---|
 | Language | Python 3.11 | Available on target systems; readable by a six-person team of mixed experience |
-| Capture parsing | `dpkt` — the single runtime dependency | Pure Python, so it is not blocked by the compiled-extension restriction |
-| Reassembly | Written for this project | Byte-to-frame provenance is not offered by existing libraries |
-| TLS parsing | Written for this project | Record and handshake layer, JA3/JA3S, key-exchange groups including ML-KEM hybrids |
-| X.509 | Written for this project | DER parser plus RSA PKCS#1 v1.5 signature verification (ADR-0017) |
-| Rules | Declarative dataclasses | Predicate plus standards plus remediation in one object |
-| Feature extraction | Standard library | 51 fields, no numerical dependency |
-| Machine learning | XGBoost and Isolation Forest, trained off-box | The methods the problem statement names; the pipeline and corpus export are complete |
-| Reporting | Single self-contained HTML file, JSON, PDF | No CDN, no fonts, no build step (ADR-0018); PDF degrades cleanly if the renderer is absent |
+| Capture parsing | `dpkt` | Pure Python, not blocked by the compiled-extension restriction |
+| Reassembly, TLS, X.509 | Written for this project | Byte-to-frame provenance is not offered by existing libraries (ADR-0002, ADR-0017) |
+| Rules | Declarative frozen dataclasses | Predicate, standards and remediation in one object |
+| Machine learning | `gbt.py` + `iforest.py`, pure Python | ADR-0031; numpy is blocked, and the deliverable should not depend on a human running a notebook |
+| Narrative | Deterministic template + closed-vocabulary verifier | ADR-0028 |
+| Service | **Flask**, not FastAPI | `pydantic_core` is blocked (ADR-0021) |
+| Production server | `waitress` | Pure Python WSGI server |
+| Persistence | stdlib `sqlite3`, five tables, no ORM | ADR-0021, ADR-0022 |
+| Auth | stdlib only | ADR-0024 |
+| Console | Hash-routed vanilla JS, hand-drawn SVG charts | ADR-0025; node/npm never installed |
+| Reporting | Self-contained HTML, JSON, CEF, ECS | ADR-0018 |
 | Testing | Standard library, no pytest | Tests must not add a dependency |
-| Documentation | Markdown in git | Ten documents, all versioned with the code |
 
-Approximately 13,300 lines of Python; 168 tests passing.
+Approximately **15,800 lines of Python**, plus roughly 2,200 lines of console CSS, JS and HTML.
 
----
+## 9.2 The platform layer (ADR-0022)
 
-# 8. Detailed Technical Implementation
+Five SQLite tables: `jobs`, `reports`, `dispositions`, `audit`, `snapshots`. No ORM. The `audit` table directly
+serves the CERT-In six-hour reporting obligation: every action against the system is recorded with actor,
+timestamp and subject, so the question "who looked at what, and when" has an answer before it is asked.
 
-## 8.1 TCP reassembly with provenance (S1)
+## 9.3 The console (ADR-0025, ADR-0026)
 
-Streams are rebuilt per direction with sequence-number ordering, retransmission and overlap handling, and a
-provenance structure mapping every byte offset in the reassembled stream to the frame it came from. Findings
-later cite offsets into this stream, and the provenance map converts those offsets into frame numbers an analyst
-can open in Wireshark. Incomplete streams are retained and marked rather than discarded, because a truncated
-capture is the normal case in forensic work.
+A twelve-view single-page operations console served by Flask, hash-routed in vanilla JavaScript with hand-drawn
+SVG charts. There is deliberately **no geographic threat map** — it would be decorative, since a capture carries
+no reliable geography, and a dashboard that implies knowledge it does not have is the same failure mode as an
+empty certificate panel.
 
-## 8.2 Protocol identification (S2)
+## 9.4 SIEM export
 
-Identification is banner-led. The server's greeting and the subsequent command grammar determine whether a
-stream is SMTP, IMAP or POP3; the port is recorded and used to assign a role, but is not trusted to identify
-the protocol. Dreger et al. established the principle in 2006 and the reasoning has not changed: traffic on
-non-standard ports is disproportionately interesting precisely because avoiding a standard port is itself a way
-of evading inspection.
+`siem.py` emits two formats: **CEF** (ArcSight Common Event Format, understood by Splunk, QRadar and Sentinel),
+with our five severity levels mapped onto CEF's 0–10 scale leaving headroom at the top; and **ECS** (Elastic
+Common Schema) as newline-delimited JSON. Both carry the capture hash, so a finding in a SIEM remains traceable
+to the bytes that produced it.
 
-## 8.3 The STARTTLS state machine (S3)
+## 9.5 Deployment
 
-Ten checks over the plaintext phase, structured around the published attack classes: whether the capability was
-advertised; whether it was advertised and then not used; whether the advertised set is internally consistent
-with the observed negotiation; whether EHLO was correctly re-issued after the upgrade (RFC 3207 §4.2); whether
-plaintext AUTH was offered before TLS (RFC 4954); whether the capability line shows the same-length rewrite
-signature; whether the server rejected the command; whether the session continued in plaintext after a failed
-upgrade; whether credentials appeared before the upgrade; and whether the transition boundary is consistent
-with the record layer that follows.
-
-## 8.4 TLS handshake parsing (S4)
-
-A record-layer parser feeds a handshake parser that extracts ClientHello and ServerHello, offered and selected
-cipher suites, supported groups and key shares, extensions, ALPN, SNI, session resumption indicators and
-alerts. JA3 and JA3S fingerprints are computed from the ordered field sets. Post-quantum readiness is
-determined from the named groups — hybrid constructions such as X25519MLKEM768 — recorded separately for
-*offered* and *negotiated*, because those are different facts with different meanings. Version downgrade is
-detected both by comparing offered against negotiated and by testing for the RFC 8446 sentinel.
-
-## 8.5 DER and X.509 (S5)
-
-A DER reader with explicit length and tag validation, an X.509 structure decoder, chain construction against a
-supplied trust anchor, and RSA PKCS#1 v1.5 signature verification implemented over Python integers. Validity
-windows, self-signature, key size, signature hash algorithm, chain completeness and name matching are all
-evaluated. Where the certificate is encrypted by TLS 1.3, the chain is recorded as `OPAQUE_TLS13` rather than
-absent.
-
-## 8.6 The rule engine and severity policy (S6)
-
-Each rule is a frozen dataclass: identifier, title, category, base severity, predicate, description, standards
-tuple, related attacks, remediation block and evidence note. Predicates are functions of a narrow
-`RuleContext` — the feature vector plus host, port and role — and a rule that raises an exception is treated as
-not firing, so a defect in one rule cannot abort a run.
-
-The narrow context is a deliberate consequence of one decision worth highlighting (ADR-0003): because rules are
-predicates over the feature vector rather than over parsed session objects, the *same* rule implementations run
-over real sessions and over synthetic feature vectors. The labelling oracle used to generate machine-learning
-training data therefore cannot drift from the shipping detector.
-
-Severity is emitted as a base value by the rule and then adjusted by a policy table keyed on `(category,
-role)`, with the adjustment and its justification recorded on the finding.
-
-## 8.7 Feature extraction (S7)
-
-51 fields per session, grouped as: protocol version and downgrade indicators (3); cipher properties (7); key
-exchange and forward secrecy (5); post-quantum offered and negotiated (2); certificate properties (11); port
-role (3); TLS mode (3); STARTTLS state (3); attack indicators (7); configuration flags (5); and fingerprint
-rarity (2). The full list is in Appendix D.
-
-## 8.8 The AI layer (S8)
-
-Three functions over the feature vector. **Risk classification** produces a 0–100 score per session, with
-XGBoost as the intended model and a rule-derived baseline in place until training completes. **Anomaly
-detection** scores each session against a fleet baseline built from the capture, with Isolation Forest as the
-intended model; the baseline is computed in two passes with outliers rejected before the second, because a
-baseline built in one pass from a capture containing attacks allows the attacks to define normality — the same
-concern that motivates robust covariance estimation. **Priority ordering** combines adjusted severity, risk
-score, anomaly score and blast radius into the triage queue. Every score carries the features that drove it, in
-the spirit of SHAP attribution, because a score an operator cannot interrogate is a score they will not trust.
-
-## 8.9 Scoring and grading (S9)
-
-Per-category scores aggregate to a host score and a host grade; host grades aggregate to a fleet score and
-grade. Thresholds are 95 for A+, 85 for A, 75 for B and downwards. Two capping rules matter: a critical finding
-caps the achievable grade regardless of the arithmetic, and any host with an incomplete handshake analysis that
-would otherwise grade A+, A or B is reassigned `?`.
-
-## 8.10 Reporting (S10)
-
-One `Report` object emits all three formats, so they cannot disagree. The HTML is a single file with CSS,
-script and data inlined — no CDN, no web fonts, no build step — and is also the interactive dashboard: posture
-grade, executive summary, fleet table, filterable triage queue, per-session handshake detail, the STARTTLS
-checks, the certificate chain, the risk waterfall, anomaly reasons, the feature vector, the compliance report
-card, and a side-by-side panel that assembles itself from whichever rule produced opposite verdicts under
-different port roles. Four persona views share one analysis, which a test enforces. Dark by default, with a
-light theme and print rules so that Print to PDF produces the same document.
+`DEPLOY.md` covers Render, Railway and Docker, and what the public demonstration instance accepts.
+`SMS_BEHIND_TLS=0 python -m securemailscope.api.production` runs the waitress server. Branding is a single
+configuration value — `app.config["BRAND"]` or the `SMS_BRAND` environment variable (ADR-0026).
 
 ---
 
-# 9. Feasibility Analysis
+# 10. Feasibility Analysis
 
-## 9.1 Technical feasibility
+## 10.1 Technical feasibility
 
-The system exists and runs end to end: approximately 13,300 lines, 168 passing tests, 34 rules, twelve stages,
-one command, with 25 of 34 tracked deliverables mechanically verified. The unusual feasibility risk in a project
-like this — that the hard parsing work turns out to be intractable within the timeframe — has already been
-retired. What remains is additive.
+The system exists, runs end to end, and has been measured. Approximately 15,800 lines of Python with 277 passing
+tests, 34 detection rules, eleven pipeline stages, a trained model and a working console, with **32 of 34
+tracked deliverables mechanically verified**. The feasibility risk usual to a project of this kind — that the
+hard parsing work proves intractable within the timeframe — has been retired. What remains is additive.
 
-Deployment feasibility is stronger than for any comparable design: a single pure-Python dependency means
-installation is a file copy, with no package manager, no network access, no container runtime and no model
-artefact required.
+Deployment feasibility is stronger than for any comparable design: three pure-Python dependencies mean
+installation is a file copy, with no package manager, no network access, no container runtime, no GPU and no
+model artifact to fetch. The training step, which in most systems is the part that cannot be reproduced on
+demand, completes in under fifteen seconds on a laptop.
 
-## 9.2 Economic feasibility
+## 10.2 Economic feasibility
 
 The engine and rule pack are open, because government adoption depends on source availability. Revenue sits
-above it: a continuous sensor with a fleet view; an annual posture attestation that a CERT-In empanelled auditor
-can sign; and a cryptographic-inventory subscription as the FY 2027–28 CBOM requirement takes effect.
+above it: a continuous sensor with a fleet view; an annual posture attestation a CERT-In empanelled auditor can
+sign; and a cryptographic-inventory subscription as the FY 2027–28 CBOM requirement takes effect.
 
-Demand is documented rather than assumed, which is unusual and worth stating explicitly. Ashiq et al. surveyed
-117 email operators: 94.7% were aware of MTA-STS and 48.8% named operational complexity as the reason they had
-not deployed it. Lee et al. attribute 87% incorrect DANE key rollovers to the absence of automated tooling. The
-constraint in this market is instrumentation, not awareness.
+Demand is documented rather than assumed, which is unusual. Ashiq et al. surveyed 117 email operators: 94.7%
+were aware of MTA-STS and 48.8% named operational complexity as the reason they had not deployed it. Lee et al.
+attribute 87% incorrect DANE key rollovers to the absence of automated tooling. The constraint in this market is
+instrumentation, not awareness.
 
 Comparable products in cryptographic discovery — IBM Quantum Safe Explorer, SandboxAQ AQtive Guard, Keyfactor
-AgileSec (following its acquisition of InfoSec Global) — establish that enterprises pay for cryptographic
-inventory. All of them derive it from source code, container images or host agents; none derives it from
-observed mail traffic.
+AgileSec — establish that enterprises pay for cryptographic inventory. All derive it from source code, container
+images or host agents; none derives it from observed mail traffic.
 
-## 9.3 Regulatory and legal feasibility
+## 10.3 Regulatory and legal feasibility
 
-**Compliance mapping.** Findings cite NIST SP 800-52 Rev 2, NIST SP 800-45 Rev 2 and RFCs 7435, 8314, 8461,
-7672, 8460, 8996, 9325 and 8446. SEBI's Cybersecurity and Cyber Resilience Framework (August 2024) requires TLS
-1.2 or better for data in transit across regulated entities; CERT-In's June 2023 guidelines for government
-entities require encrypted connections to mail servers and the deployment of SPF, DKIM and DMARC. This tool
-produces the evidence those requirements presuppose.
+**Compliance mapping.** Findings cite NIST SP 800-52 Rev 2, NIST SP 800-45 Rev 2 and RFCs 3207, 4954, 5746,
+6176, 7435, 7465, 7672, 8314, 8446, 8460, 8461, 8996 and 9325. SEBI's Cybersecurity and Cyber Resilience
+Framework (August 2024) requires TLS 1.2 or better for data in transit across regulated entities; CERT-In's June
+2023 guidelines for government entities require encrypted connections to mail servers and deployment of SPF,
+DKIM and DMARC. The tool produces the evidence those requirements presuppose — **17 standards tracked**, each
+reported as passing, failing or not observable.
 
 **Evidence admissibility.** Section 63 of the Bharatiya Sakshya Adhiniyam, 2023 conditions admissibility of an
-electronic record on a certificate that states the record's hash value, signed by the person in charge of the
-device and by an expert. Courts have been directed to treat an unexplained variation in hash value between
-seizure and presentation as raising a strong presumption of tampering. Because CyberKavach computes and reports
-the capture's SHA-256 and anchors every finding to frames and byte offsets within that capture, its output maps
-directly onto what the provision requires. Appendix C of the implementation plan includes generating that
-certificate as a report annexe.
+electronic record on a certificate stating the record's hash value, signed by the person in charge of the device
+and by an expert. Courts have been directed to treat an unexplained variation in hash value between seizure and
+presentation as raising a strong presumption of tampering. Because CyberKavach computes and reports the
+capture's SHA-256 and anchors every finding to frames and byte ranges within that capture, its output maps
+directly onto what the provision requires.
 
 **Privacy and lawfulness of capture.** The tool operates only on captures the operator is authorised to hold,
 performs no decryption, copies no message content, redacts recovered credentials by default and makes no network
-calls. Under the DPDP Rules notified 13 November 2025, a data fiduciary must file a detailed breach report
-within 72 hours; a forensic tool that never copies message content is materially easier to clear for use than
-one that does.
+calls. Under the DPDP Rules notified 13 November 2025 a data fiduciary must file a detailed breach report within
+72 hours; a forensic tool that never copies message content is materially easier to clear for use than one that
+does. The `audit` table records every action against the system with actor, timestamp and subject, which is what
+the CERT-In six-hour obligation actually requires an organisation to be able to produce.
 
-## 9.4 Operational feasibility
+## 10.4 Operational feasibility
 
-The tool consumes a file format every existing capture infrastructure already produces and emits JSON that an
-existing SIEM can ingest. It installs no agents and requires no change to mail servers. The operational burden
-is therefore the capture policy, which in Indian regulated entities already exists by mandate.
+The tool consumes a file format every existing capture infrastructure already produces and emits JSON, CEF and
+ECS that an existing SIEM can ingest. It installs no agents and requires no change to mail servers. The
+operational burden is therefore the capture policy, which in Indian regulated entities already exists by
+mandate.
 
 ---
 
-# 10. Challenges and Solutions
+# 11. Challenges and Solutions
 
-## 10.1 Technical challenges
+## 11.1 Technical challenges
 
-**TLS 1.3 conceals the certificate.** Approximately the single most common objection. The response is not to
-guess: report `OPAQUE_TLS13` with the reason, assess the substantial information that remains visible in the
-handshake, and grade the host `?`. This converts a blind spot into a reported fact.
+**TLS 1.3 conceals the certificate.** The most common objection. The response is not to guess: report
+`OPAQUE_TLS13` with the reason, assess the substantial information that remains visible in the handshake, and
+grade the host `?`. This converts a blind spot into a reported fact.
 
-**The environment blocks the numerical toolchain.** Windows Smart App Control on the development machines
-blocks compiled extensions, which has so far prevented `numpy` (and therefore scikit-learn), `cryptography`,
-Pillow, OpenSSL and git's networking library from loading. The consequences were absorbed rather than worked
-around: we wrote the DER/X.509 parser and the certificate generator ourselves, and the classifier trains off-box
-with the feature pipeline and CSV export complete. A secondary lesson worth recording is that `import
-cryptography` succeeds while `from cryptography import x509` fails, so the actual call path must be tested, not
-the import.
+**The environment blocks the numerical toolchain.** Smart App Control on the development machines blocks
+compiled extensions, which has prevented `numpy` (and therefore scikit-learn and XGBoost), `cryptography`,
+Pillow, OpenSSL, `pydantic`/`fastapi` and git's HTTPS transport from loading. The consequences were absorbed
+rather than worked around: we wrote the DER/X.509 parser, the certificate generator, the gradient-boosting
+trainer and the isolation forest ourselves, moved the service to Flask, and moved git to SSH. A secondary lesson
+worth recording is that `import cryptography` succeeds while `cryptography.x509` fails, and `import reportlab`
+fails only because it imports Pillow — so the actual call path must be tested, not the import.
 
 **A baseline built from an attacked capture treats attacks as normal.** Two-pass construction with outlier
-rejection before the second pass, following the logic of robust covariance estimation.
+rejection before the second pass (ADR-0019).
 
-**No public ground truth.** Solved by construction: a byte-level PCAP generator, a real certificate authority,
-and a manifest of expected findings; validated externally by comparing the parse against `tshark`.
+**An anomaly rule that fires on every legacy server.** The cipher-intersection detector initially reported every
+old server as under attack. It now requires corroboration (ADR-0023). This was found by the evaluation harness,
+not by review — which is the argument for having one.
+
+**Captures that silently decode to nothing.** Five of seven link-layer encapsulations once lost every frame and
+produced a clean A+. Fixed by explicit decoding of all seven, and by the rule that an undecodable capture grades
+`?` (ADR-0027).
 
 **Certificate parsers are a classic source of defects.** Mitigated by writing the parser in pure Python with no
-memory management, testing it against deliberately malformed inputs, and cross-validating against an
-independent implementation. The literature is on our side here in an unexpected way: Georgiev et al. and
-Brubaker et al. found that the mainstream libraries' own APIs are the dominant source of validation failures.
+memory management, testing against deliberately malformed inputs, and planned cross-validation against an
+independent implementation. The literature supports the approach: Georgiev et al. and Brubaker et al. found the
+mainstream libraries' own APIs are the dominant source of validation failures.
 
-## 10.2 Operational challenges
+## 11.2 Operational challenges
 
-**Alert fatigue.** The failure mode of every security tool. Addressed by role-aware severity, prioritisation
-and the explicit decision to report low-consequence findings as informational rather than suppressing or
-inflating them.
+**Alert fatigue.** The failure mode of every security tool, and the one Sommer & Paxson predict from the base
+rate. Addressed by role-aware severity, prioritisation, and the decision to report low-consequence findings as
+informational rather than suppressing or inflating them. Measured severity accuracy is 1.00.
 
-**Findings that nobody acts on.** Li et al. measured this directly: even among operators who read detailed
-remediation material, fewer than 40% fixed the problem. The response is to make the fix as close to
-copy-and-paste as possible and to order the queue so that the first three items are the ones that matter.
+**Findings nobody acts on.** Li et al. measured this: even among operators who read detailed remediation
+material, fewer than 40% fixed the problem. The response is to make the fix as close to copy-and-paste as
+possible and to order the queue so the first three items are the ones that matter.
 
 **Capture coverage.** A capture taken at the wrong point sees the wrong thing. Documented as a deployment
-requirement, with the threat model stating explicitly what a given vantage point can and cannot establish.
+requirement, with the threat model stating what a given vantage point can and cannot establish.
+
+**A server that restarts but does not.** During console development, a second server that failed to bind exited
+silently while the stale one kept serving, costing half a session. Recorded in the worklog with the check that
+prevents it.
 
 **Six contributors on a four-day build.** Managed by treating the schema as a frozen contract with generated
-fixtures, so that stages could be developed against the contract rather than against each other, and by
-running `scripts/audit.py` before and after every change.
+fixtures, so stages could be developed against the contract rather than against each other, and by running
+`scripts/audit.py` before and after every change.
 
 ---
 
-# 11. Impact Assessment and Benefits
+# 12. Impact Assessment and Benefits
 
-## 11.1 Capability impact
+## 12.1 Capability impact
 
-The primary impact is the existence of a capability that currently has no instrument: assessing the
-cryptographic posture of an email estate from evidence rather than from access. Three consequences follow.
+The primary impact is a capability that currently has no instrument: assessing the cryptographic posture of an
+email estate from evidence rather than from access. Three consequences follow.
 
 - **Incident response within the statutory window.** CERT-In requires reporting within six hours; the log and
-  capture material is already retained for 180 days by mandate. A one-command analysis that produces a graded,
-  evidence-linked report converts existing raw material into a filing.
+  capture material is already retained for 180 days by mandate. A one-command analysis producing a graded,
+  evidence-linked report converts existing raw material into a filing, and the audit table answers "who looked
+  at what, and when".
 - **Assessment of estates that cannot be probed.** Active scanning requires reachability and authorisation. A
   capture requires neither, which is what makes assessment of third-party, partner and legacy infrastructure
   possible at all.
-- **Cryptographic inventory ahead of a deadline.** India's roadmap requires critical infrastructure to inventory
-  cryptographic assets by 2027 and vendors to supply CBOMs from FY 2027–28. For mail, the measured baseline is
-  6.4% post-quantum readiness against 44.0% for the web, and no post-quantum certificates anywhere.
+- **Cryptographic inventory ahead of a deadline.** India's roadmap requires CII to inventory cryptographic
+  assets by 2027 and vendors to supply CBOMs from FY 2027–28. For mail the measured baseline is 6.4%
+  post-quantum readiness against 44.0% for the web, and no post-quantum certificates anywhere.
 
-## 11.2 Stakeholder benefits
+## 12.2 Stakeholder benefits
 
 **Government and regulators.** Evidence-grade posture reporting for the NIC-operated government mail estate,
 whose single-operator structure means one deployment covers it; sectoral assessment for NCIIPC; a defensible
@@ -855,17 +1020,17 @@ basis for CERT-In filings; and progress measurement against the PQC roadmap.
 justifies each one.
 
 **Auditors.** A compliance report card with explicit OBSERVED / NOT_FOUND / UNKNOWN / INSUFFICIENT_EVIDENCE
-verdicts and an evidence pack that satisfies section 63.
+verdicts across 17 tracked standards, an evidence pack satisfying section 63, and an attack matrix whose
+ruled-out rows are positive assurance.
 
-**Incident responders.** Five attack detectors, a timeline, and recovered credentials as proof of exposure
-rather than an inference of it.
+**Incident responders.** Five attack detectors, a timeline, recovered credentials as proof of exposure, and
+drift analysis that surfaces host-level reversals an aggregate score conceals.
 
 **Citizens.** Email carries password resets, financial instructions and legal notices for several hundred
 million Indians, and users have no way to know whether a message crossed the network protected — a point Mayer
-et al. make explicitly in observing that users are left in the dark about whether their mail travels in
-plaintext.
+et al. make explicitly.
 
-## 11.3 Economic impact
+## 12.3 Economic impact
 
 Business email compromise accounted for $3.046 billion of reported losses in 2025 across 24,768 complaints. Of
 the 29.44 lakh incidents CERT-In handled in 2025, 3,41,646 were vulnerable exposed services. A tool that reduces
@@ -876,12 +1041,12 @@ Two market figures frame the commercial opportunity, and should be presented as 
 security market at $0.427 billion in 2025 rising to $1.31 billion by 2035, and the post-quantum cryptography
 market at $810 million rising to $18.19 billion over the same period.
 
-## 11.4 Alignment with the Sustainable Development Goals
+## 12.4 Alignment with the Sustainable Development Goals
 
 **SDG 9 — industry, innovation and infrastructure.** The ITU situates the strengthening of cybersecurity within
-Goal 9, and target 9.c's commitment to universal ICT access presupposes that the infrastructure beneath it can
-be trusted. Email transport is a component of that infrastructure that is currently unmeasured at the level of
-the individual operator.
+Goal 9, and target 9.c's commitment to universal ICT access presupposes the infrastructure beneath it can be
+trusted. Email transport is a component of that infrastructure currently unmeasured at the level of the
+individual operator.
 
 **SDG 16 — peace, justice and strong institutions.** Target 16.6, effective and accountable institutions, is
 served directly by evidence-linked findings: accountability requires verifiable claims. Target 16.4, the
@@ -893,152 +1058,169 @@ goals rather than six because the additional claims would be decorative.
 
 ---
 
-# 12. Sustainability and Long-Term Viability
+# 13. Sustainability and Long-Term Viability
 
-## 12.1 Technical sustainability
+## 13.1 Technical sustainability
 
-The dependency surface is one pure-Python library, which is the strongest available guarantee against
-bit-rot: there is no compiled ABI to break, no model artefact to expire, and no external service to be
-deprecated. The rule pack is data rather than control flow, so keeping pace with standards means editing
-declarative objects, and the standards citation attached to each rule makes it auditable which revision a rule
-implements.
+The dependency surface is three pure-Python libraries, which is the strongest available guarantee against
+bit-rot: no compiled ABI to break, no model artifact to expire, no external service to be deprecated. The rule
+pack is data rather than control flow, so keeping pace with standards means editing declarative objects, and the
+standards citation attached to each rule makes it auditable which revision a rule implements.
 
 **Crypto-agility is the central long-term design concern**, and it is also the product. Between now and 2035 the
 cryptographic landscape changes twice: hybrid post-quantum key exchange becomes the default, and post-quantum
 certificates begin to appear, currently at zero adoption. A tool whose job is to report which algorithms are in
 use must be able to name algorithms that do not yet exist in deployments. Because group and algorithm
-identifiers are parsed and reported rather than matched against a closed list, unknown identifiers are surfaced
-as unrecognised rather than silently dropped.
+identifiers are parsed and reported rather than matched against a closed list, and cipher properties are derived
+from IANA names rather than tabulated (ADR-0015), unknown identifiers are surfaced as unrecognised rather than
+silently dropped.
 
-## 12.2 Environmental footprint
+## 13.2 Environmental footprint
 
-Modest and worth one sentence rather than a section: analysis is single-pass over a file on one machine, with no
-training at inference time, no cloud round trips and no always-on service. The comparison class — continuous
-active scanning of an address space, or a hosted dashboard with a persistent backend — consumes considerably
-more.
+Modest, and worth one sentence rather than a section: analysis is single-pass over a file on one machine,
+training takes fifteen seconds without a GPU, and there are no cloud round trips and no always-on service. The
+comparison class — continuous active scanning of an address space, or a hosted dashboard with a persistent
+backend — consumes considerably more.
 
-## 12.3 Institutional and financial sustainability
+## 13.3 Institutional and financial sustainability
 
-An open engine with paid operational tooling above it is the model that has worked for comparable
-security instrumentation, and it is compatible with government procurement, which requires source
-availability. The CERT-In empanelment structure — 231 audit organisations — provides a distribution route that
-does not require building a direct sales operation. The 2027 and FY 2027–28 regulatory milestones provide a
-demand event with a date attached, which is a more reliable basis for planning than a market forecast.
+An open engine with paid operational tooling above it is the model that has worked for comparable security
+instrumentation, and it is compatible with government procurement, which requires source availability. The
+CERT-In empanelment structure — 231 audit organisations — provides a distribution route that does not require
+building a direct sales operation. The 2027 and FY 2027–28 regulatory milestones provide a demand event with a
+date attached, which is a more reliable basis for planning than a market forecast.
 
 ---
 
-# 13. International Benchmarking and Best Practices
+# 14. International Benchmarking and Best Practices
 
-## 13.1 Comparison with existing tools
+## 14.1 Comparison with existing tools
 
-| Tool | What it does | Works from a capture | Works offline | Mail-aware severity | Attack evidence |
-|---|---|---|---|---|---|
-| SSL Labs | Grades a web TLS endpoint thoroughly | No | No | No | No |
-| testssl.sh / sslyze | Enumerates endpoint capability | No | No | No | No |
-| internet.nl mail test | Scores STARTTLS, DANE, SPF/DKIM/DMARC per domain; does not test MTA-STS | No | No | Partial | No |
-| CheckTLS | Tests a mail domain's transport | No | No | No | No |
-| Wireshark / tshark | Decodes packets | Yes | Yes | No | No |
-| Zeek + JA4 | Logs TLS metadata at scale from capture or wire | Yes | Yes | No | No |
-| IBM Quantum Safe / SandboxAQ / Keyfactor | Cryptographic inventory | No (source, container or agent) | Varies | No | No |
-| **CyberKavach** | Graded posture assessment with evidence and remediation | **Yes** | **Yes** | **Yes** | **Yes** |
+| Tool | What it does | From a capture | Offline | Mail-aware severity | Attack evidence | Rules out attacks |
+|---|---|---|---|---|---|---|
+| SSL Labs | Grades a web TLS endpoint | No | No | No | No | No |
+| testssl.sh / sslyze | Enumerates endpoint capability | No | No | No | No | No |
+| internet.nl mail test | Scores STARTTLS, DANE, SPF/DKIM/DMARC; does not test MTA-STS | No | No | Partial | No | No |
+| CheckTLS | Tests a mail domain's transport | No | No | No | No | No |
+| Wireshark / tshark | Decodes packets | Yes | Yes | No | No | No |
+| Zeek + JA4 | Logs TLS metadata at scale | Yes | Yes | No | No | No |
+| IBM / SandboxAQ / Keyfactor | Cryptographic inventory | No (source, container or agent) | Varies | No | No | No |
+| **CyberKavach** | Graded posture with evidence, remediation and an attack matrix | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** |
 
 The pattern is consistent: tools that judge require access, and tools that work from captures decode without
 judging. Zeek is the closest and the distinction is precise — it produces excellent logs and no assessment,
-which is why it would be a sensible input to a large-scale deployment of this analysis rather than a competitor
-to it.
+which makes it a sensible *input* to a large-scale deployment of this analysis rather than a competitor.
 
-## 13.2 International policy benchmarking
+## 14.2 International policy benchmarking
 
 | Jurisdiction | Instrument | First required step | Date |
 |---|---|---|---|
 | India | DST / National Quantum Mission PQC roadmap (Feb 2026) | Inventory cryptographic assets, assess quantum risk | **2027** (CII) |
 | India | CBOM requirement for vendors | Submit cryptographic bill of materials | **FY 2027–28** |
-| United Kingdom | NCSC phased migration timeline | Cryptographic discovery, dependency mapping, migration planning | **2028** |
+| United Kingdom | NCSC phased migration timeline | Cryptographic discovery, dependency mapping, planning | **2028** |
 | United States | NIST IR 8547 | RSA-2048 / P-256 deprecated, then disallowed | **2030 / 2035** |
 | European Union | Coordinated PQC transition recommendation | National roadmaps across member states | — |
 
 Three jurisdictions independently place *discovery* first. The measurement literature independently finds mail
-the least ready protocol. The intersection of those two facts is the strategic case for this work.
+the least ready protocol. The intersection is the strategic case for this work.
 
-## 13.3 Where India is positioned
+## 14.3 Where India is positioned
 
-MTA-STS and DANE adoption is low everywhere — even the Netherlands, which has pushed hardest on mail security
-standards through internet.nl, reported 14% DANE and 6% MTA-STS in September 2025. India's advantage is
-structural rather than technical: because official government mail is centralised at NIC under the E-mail Policy
-of the Government of India, a single operator decision propagates across the whole government estate. The
-binding constraint is measurement, and that is what this tool supplies.
+MTA-STS and DANE adoption is low everywhere — even the Netherlands, which has pushed hardest through
+internet.nl, reported 14% DANE and 6% MTA-STS in September 2025. India's advantage is structural rather than
+technical: because official government mail is centralised at NIC under the E-mail Policy of the Government of
+India, a single operator decision propagates across the whole government estate. The binding constraint is
+measurement, and that is what this tool supplies.
 
 ---
 
-# 14. Implementation Roadmap
+# 15. Implementation Roadmap
 
-## 14.1 Completed (Days 1–3, 23–26 September 2026)
+## 15.1 Completed
 
-Schema frozen and contract generated; PCAP ingest and TCP reassembly with provenance; protocol identification
-and the STARTTLS state machine; TLS record and handshake parsing with JA3/JA3S and post-quantum group
-detection; DER/X.509 parsing with RSA signature verification; the 34-rule pack with standards and remediation on
-every rule; role-aware severity; 51-field feature extraction; the AI layer on a rule-derived baseline; scoring
-and aggregation; JSON, self-contained HTML dashboard and PDF reporting; the synthetic corpus and ground-truth
-manifest; 168 tests; `scripts/audit.py`.
+Schema frozen and contract generated; link-layer decoding across seven encapsulations; TCP reassembly with
+provenance; protocol identification and the STARTTLS state machine; TLS record and handshake parsing with
+JA3/JA3S and post-quantum group detection; DER/X.509 parsing with RSA signature verification; the 34-rule pack
+with standards and remediation on every rule; role-aware severity; 51-field feature extraction; a
+gradient-boosted risk model and isolation forest trained locally in pure Python; the grounded narrative layer
+with its verifier; scoring and aggregation; the attack feasibility matrix; temporal drift; JSON, self-contained
+HTML, CEF and ECS outputs; the Flask service with stdlib authentication and a twelve-view console; the synthetic
+corpus, ground-truth manifest and evaluation harness; 277 tests; `scripts/audit.py` and `scripts/evaluate.py`.
 
-## 14.2 Immediate (before submission)
+## 15.2 Immediate
 
-1. **`scripts/evaluate.py`** — the per-rule precision and recall loop. Highest priority; a claimed
-   differentiator with no data behind it is worse than an unmade claim.
-2. **Two-pass anomaly baseline** — approximately 40 lines, removes a known methodological defect.
-3. **Human review of the dashboard's visual design**, which has been verified structurally but never looked at.
-4. **`tshark` cross-validation** of the handshake parse across the corpus.
+1. **USP-11 — passive DNS, DANE and MTA-STS correlation.** The one unbuilt differentiator, and the
+   highest-value remaining feature.
+2. **Real-world captures.** Every capture measured so far is synthetic and self-authored. This is now the most
+   likely cause of an unpleasant surprise under demonstration.
+3. **Human review of the offline HTML report**, which has been verified structurally but never looked at. The
+   console has been driven end to end in a browser; the report is a separate renderer.
+4. **A deliberate decision on the scoring curve**, so that a cleartext relay does not reach the top grade (§17.2).
 
-## 14.3 Phase 1 (Months 1–3): completeness against the problem statement
+## 15.3 Phase 1 (Months 1–3)
 
-Domain-mode assessment — MTA-STS, DANE and TLSRPT lookups for a supplied domain, which the problem statement
-accepts alongside a capture; the trained classifier; the evidence certificate annexe in the form section 63 expects.
+Cross-validation of the handshake parse against an independent implementation; a CBOM export in CycloneDX form;
+the evidence certificate annexe in the form section 63 expects; PDF export once a renderer is available.
 
-## 14.4 Phase 2 (Months 4–9): operational deployment
+## 15.4 Phase 2 (Months 4–9)
 
 Continuous sensor mode with a rolling baseline and drift detection; fleet aggregation across captures and over
-time; SIEM integration through JSON; CBOM export in CycloneDX form; a pilot with a CERT-In empanelled auditor.
+time; deeper SIEM integration; a pilot with a CERT-In empanelled auditor.
 
-## 14.5 Phase 3 (Months 10–18): scale and institutionalisation
+## 15.5 Phase 3 (Months 10–18)
 
 Deployment against a government estate in coordination with NIC; sector-level baselines for NCIIPC; longitudinal
-posture measurement as the PQC migration proceeds; contribution of the rule pack and corpus as a public
+posture measurement as the PQC migration proceeds; publication of the rule pack and corpus as a public
 benchmark, which the research community currently lacks.
 
 ---
 
-# 15. Risk Management and Mitigation
+# 16. Risk Management and Mitigation
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Accuracy figures never produced | Medium | **High** — the central claim of §4.3 goes unsupported | `evaluate.py` is scoped and the inputs exist; treat as a submission blocker |
-| A defect in our own TLS or X.509 parser | Medium | High | 168 tests including malformed inputs; `tshark` cross-validation; pure-Python parser with no memory management |
-| Environment blocks a further dependency | Medium | Low | Standard-library-only policy already in force; test the call path, not the import |
-| Trained model never materialises | Medium | Low | The deterministic engine carries the product; training is off-box and optional |
-| Capture vantage point misleads the analysis | Medium | Medium | Explicit threat model stating what a vantage point can establish; `?` grading when evidence is insufficient |
-| Findings dismissed as false alarms | Low | High | Role-aware severity, prioritisation, and a documented justification on every adjusted finding |
-| Competing implementations of the same problem statement | High | Medium | Differentiate on role-aware severity, attack evidence, evidence linkage, honest unknowns and dependency-free deployment — not on dashboard polish |
-| Legal challenge to a capture's provenance | Low | High | Capture hash, frame-level anchoring, section 63 alignment, no decryption, credentials redacted |
-| Six contributors diverging on one branch | Medium | Medium | Frozen schema, branch per stage, `scripts/audit.py` must pass before merge |
+| Real-world captures behave unlike the synthetic corpus | **High** | **High** | Seven link-layer encapsulations covered; undecodable captures grade `?`; truncation paths tested; obtaining real captures is the first roadmap item |
+| A defect in our own TLS or X.509 parser | Medium | High | 277 tests including malformed input; pure-Python parser with no memory management; independent cross-validation planned |
+| The scoring curve is attacked on stage ("you gave a plaintext server an A+") | Medium | Medium | The finding *is* reported and correctly downgraded per RFC 7435; the curve is a deliberate open decision, documented rather than hidden |
+| Environment blocks a further dependency | Medium | Low | Three pure-Python dependencies; policy of testing the call path, not the import |
+| Model degrades or fails to beat the baseline | Low | Low | The trainer refuses to write a model that loses to the baseline; the deterministic engine carries the product regardless |
+| Capture vantage point misleads the analysis | Medium | Medium | Explicit threat model; `?` grading when evidence is insufficient; drift refuses non-overlapping estates |
+| Findings dismissed as false alarms | Low | High | Role-aware severity with measured 1.00 severity accuracy; documented justification on every adjusted finding; analyst dispositions feed back as training signal |
+| Legal challenge to a capture's provenance | Low | High | Capture hash, frame-level anchoring, section 63 alignment, no decryption, credentials redacted, full audit trail |
+| Generated narrative states something untrue | Low | High | Closed-vocabulary verification discards offending text whole; deterministic template ships by default |
+| Six contributors diverging | Medium | Medium | Frozen schema, ADR discipline, audit must pass before merge, verification from a clean clone |
 
 ---
 
-# 16. Future Enhancements and Scalability
+# 17. Limitations and Future Enhancements
 
-## 16.1 Immediate gaps in the current implementation
+A research document that conceals its own limitations is worth less than one that names them. These are stated
+plainly, and every one is reproducible from the repository.
 
-Stated plainly, because a research document that conceals its own gaps is not useful.
+## 17.1 Current limitations
 
-1. **`scripts/evaluate.py` is a stub.** No precision or recall figures exist. First priority.
-2. **The anomaly baseline is single-pass** and therefore includes the attack sessions it should exclude.
-3. **No trained model.** The corpus exporter produces CSV; training requires a working numerical toolchain.
-4. **`securemailscope/api/` is a stub.** The command line is the only entry point.
-5. **`securemailscope/llm/` is a stub.** The natural-language explanation layer is unbuilt.
-6. **The dashboard's visual design has never been reviewed by a human**, only verified structurally.
-7. **MTA-STS, DANE and TLSRPT assessment is unbuilt**, which matters because the problem statement accepts a
-   domain name as input.
+1. **Every capture is synthetic.** The corpus is self-authored. The evaluation therefore measures implementation
+   correctness against declared intent, not field accuracy. This is the single largest limitation of the work.
+2. **USP-11 is not built.** Passive DNS extraction for DANE and MTA-STS correlation remains unimplemented, which
+   is also the highest-value remaining feature given the measured adoption and misconfiguration rates.
+3. **PDF export is partial.** Playwright is blocked on the development machines; browser print works with the
+   print stylesheet applied.
+4. **Throughput is 0.05 MB/s.** Pure Python with no compiled dependencies. Suitable for bounded forensic
+   captures, unsuitable for line-rate monitoring.
+5. **The offline HTML report has never been reviewed by a human.** Verified structurally only.
+6. **The scoring curve permits a top grade for a cleartext relay.** See §17.2.
+7. **The parsers have not yet been cross-validated** against an independent implementation.
 
-## 16.2 Highest-value additions
+## 17.2 The scoring curve, stated as an open question
+
+`smtp_relay_cleartext.pcap` grades A+ at 95/100. This is *correct* under role-aware severity: the relay finding
+is downgraded to LOW because opportunistic relay is outside the operator's control under RFC 7435, and the
+evaluation harness agrees with ground truth. The finding is reported. But A+ is the top grade, and "you gave an
+A+ to a plaintext mail server" is a one-line objection with a three-line defence. We record it as a deliberate
+open decision in `pipeline.py` rather than quietly adjusting the curve, because changing a score to win an
+argument is how a scoring system stops meaning anything.
+
+## 17.3 Highest-value additions
 
 **Authenticated-transport assessment (MTA-STS, DANE, TLSRPT).** The research case is unusually strong: 0.07%
 MTA-STS adoption with 29.6% of deployments broken, over 30% of DANE TLSA records unvalidatable, 87% of key
@@ -1046,45 +1228,27 @@ rollovers incorrect — and both papers attribute the failures to missing toolin
 behaviour with published policy allows a check no existing tool performs: *did this session actually honour the
 policy this domain published?*
 
-**Cryptographic Bill of Materials export.** A CycloneDX CBOM (ECMA-424) describing the algorithms, key sizes,
-certificates and protocol versions observed across a mail estate. This is the only feature on this list with a
-statutory deadline attached — FY 2027–28 — and the existing tools in that market derive inventory from code and
-hosts rather than traffic, so the passive-network path is unoccupied.
+**Cryptographic Bill of Materials export.** A CycloneDX CBOM (ECMA-424) describing algorithms, key sizes,
+certificates and protocol versions observed across a mail estate. The only feature on this list with a statutory
+deadline attached — FY 2027–28 — and the existing tools in that market derive inventory from code and hosts
+rather than traffic.
 
-**A trained and evaluated classifier.** XGBoost over the 51-field vector for risk, Isolation Forest for
-anomalies, with SHAP attribution surfaced in the report. The comparison point is established: recent work
-reports 99.94% accuracy for XGBoost on encrypted-traffic anomaly detection with SHAP explanations, which is the
-bar for a credible claim.
-
-**Post-quantum posture as a first-class report section.** Given a measured 6.4% readiness for mail against 44.0%
-for the web, and zero post-quantum certificates anywhere, separating *key exchange is migrating* from
-*certificates have not started* is a distinction the parser can already report and the roadmaps require.
-
-**Session-level continuous monitoring.** A sensor maintaining a rolling baseline with drift detection, which
-converts a point-in-time assessment into posture measurement over time — the form in which regulatory progress
-against the 2027–2029 milestones must be demonstrated.
-
-## 16.3 Research directions
-
-**Passive detection of SMTP smuggling and related message-boundary attacks**, which are adjacent to our
-STARTTLS analysis and have a recent literature of their own.
+**Real-world corpus and public benchmark.** The absence of labelled mail captures with known cryptographic
+weaknesses is a genuine obstacle to research in this area. Our generator plus manifest is a candidate
+contribution, and would be the most useful thing this project could give back.
 
 **Encrypted Client Hello.** As ECH deploys, the requested name leaves the clear portion of the handshake. Work
-is needed on what can still be established, and — consistent with §6.4 — on reporting honestly what cannot.
+is needed on what can still be established and — consistent with §8.4 — on reporting honestly what cannot.
 
 **JA4+ fingerprints** alongside JA3/JA3S, which are more robust to the client-side randomisation that has
 degraded JA3's discriminative power.
 
-**A public benchmark corpus.** The absence of labelled mail captures with known cryptographic weaknesses is a
-genuine obstacle to research in this area, and our generator plus manifest is a candidate contribution. This is
-the most useful thing this project could give back.
-
-**Per-rule false-positive characterisation on real traffic**, which requires labelled captures and is the
-honest prerequisite for any claim about field accuracy.
+**Passive detection of SMTP smuggling** and related message-boundary attacks, adjacent to our STARTTLS analysis
+and with a recent literature of its own.
 
 ---
 
-# 17. Conclusion
+# 18. Conclusion
 
 Email transport security has been measured extensively and instrumented hardly at all. The literature
 establishes that opportunistic encryption fails open by design, that authentication is largely absent in
@@ -1095,43 +1259,46 @@ post-quantum transition. What the literature does not provide — because its me
 for a specific operator to learn what happened to their own mail.
 
 CyberKavach is that instrument. It grades an email estate from a packet capture alone, on an A+ to F scale with
-`?` reserved for what it could not see; it ranks each weakness by the role of the port it was found on, which
-the literature says is the correct discrimination and which no existing tool makes; it reports five classes of
-evidence that an attack has already occurred; and it anchors every claim to a capture hash, frame number and
-byte offset, which is both what makes a finding checkable and what Indian evidence law now expects. It is
-implemented in approximately 13,300 lines of Python with one pure-Python dependency and 168 passing tests, so
-that it runs on an air-gapped machine.
+`?` reserved for what it could not see; it ranks each weakness by the role of the port, which the literature
+says is the correct discrimination and which no existing tool makes; it reports five classes of evidence that an
+attack has already occurred; it judges sixteen named attacks and reports what it has ruled out as carefully as
+what it found; and it anchors every claim to a capture hash, frame number and byte range, which is both what
+makes a finding checkable and what Indian evidence law now expects.
 
-Two things are not yet true and are stated as such. The per-rule precision and recall the evaluation design
-calls for have not been computed, because `scripts/evaluate.py` is a stub. And the classifier is untrained, so
-the risk score currently derives from a rule-based baseline. Neither affects the deterministic findings, and
-both are scoped work rather than open problems.
+The claims are measured rather than asserted. 277 tests pass. Against ground truth derived from generator
+configuration rather than from tool output, there is no disagreement across 14 captures and 20 rules. The risk
+model — gradient-boosted trees written from scratch because the standard libraries cannot be installed — trains
+in twelve seconds and beats its rule-derived baseline by 73%, with a Spearman correlation of 0.92 on the
+ordering that a triage queue actually depends on. Thirty-two of thirty-four deliverables verify mechanically.
+
+What is not yet true is stated as such. Every capture measured is synthetic. DANE and MTA-STS correlation is
+unbuilt. The parsers have not been cross-validated against an independent implementation. Throughput suits
+forensic analysis and not line-rate monitoring.
 
 The strategic case is a coincidence of two independent findings. Three jurisdictions have now placed
 cryptographic discovery as the first required step of the post-quantum transition, with India's critical
-infrastructure deadline falling in 2027 and a vendor CBOM requirement in FY 2027–28. And the most recent
-measurement of post-quantum readiness finds mail at 6.4% against 44.0% for the web, with no post-quantum
-certificates in existence anywhere. Discovery is mandated, mail is furthest behind, and for mail there is no
-discovery tool. That is the gap this work occupies.
+infrastructure deadline in 2027 and a vendor CBOM requirement in FY 2027–28. And the most recent measurement of
+post-quantum readiness finds mail at 6.4% against 44.0% for the web, with no post-quantum certificates in
+existence anywhere. Discovery is mandated, mail is furthest behind, and for mail there is no discovery tool.
+That is the gap this work occupies.
 
 ---
 
-# 18. References
+# 19. References
 
 ## Peer-reviewed papers
 
 1. Durumeric, Z., Adrian, D., Mirian, A., Kasten, J., Bursztein, E., Lidzborski, N., Thomas, K., Eranti, V.,
    Bailey, M., Halderman, J.A. "Neither Snow Nor Rain Nor MITM… An Empirical Analysis of Email Delivery
-   Security." *Proc. ACM Internet Measurement Conference (IMC)*, 2015. https://doi.org/10.1145/2815675.2815695
+   Security." *Proc. ACM IMC*, 2015. https://doi.org/10.1145/2815675.2815695
 2. Mayer, W., Zauner, A., Schmiedecker, M., Huber, M. "No Need for Black Chambers: Testing TLS in the E-mail
    Ecosystem at Large." *Proc. ARES*, 2016. https://arxiv.org/abs/1510.08646
 3. Holz, R., Amann, J., Mehani, O., Wachs, M., Kaafar, M.A. "TLS in the Wild: An Internet-wide Analysis of
    TLS-based Protocols for Electronic Communication." *NDSS*, 2016. https://arxiv.org/abs/1511.00341
 4. Foster, I.D., Larson, J., Masich, M., Snoeren, A.C., Savage, S., Levchenko, K. "Security by Any Other Name:
    On the Effectiveness of Provider Based Email Security." *Proc. ACM CCS*, 2015.
-   https://klevchen.ece.illinois.edu/pubs/flmssl-ccs15.pdf
-5. Poddebniak, D., Ising, F., Böck, H., Schinzel, S. "Why TLS is better without STARTTLS: A Security Analysis
-   of STARTTLS in the Email Context." *30th USENIX Security Symposium*, 2021.
+5. Poddebniak, D., Ising, F., Böck, H., Schinzel, S. "Why TLS is better without STARTTLS: A Security Analysis of
+   STARTTLS in the Email Context." *30th USENIX Security Symposium*, 2021.
    https://www.usenix.org/system/files/sec21-poddebniak.pdf
 6. Lee, H., Ashiq, M.I., Müller, M., van Rijswijk-Deij, R., Kwon, T., Chung, T. "Under the Hood of DANE
    Mismanagement in SMTP." *31st USENIX Security Symposium*, 2022.
@@ -1140,130 +1307,112 @@ discovery tool. That is the gap this work occupies.
    Securing Email." *Proc. ACM IMC*, 2025. https://doi.org/10.1145/3730567.3732916
 8. Georgiev, M., Iyengar, S., Jana, S., Anubhai, R., Boneh, D., Shmatikov, V. "The Most Dangerous Code in the
    World: Validating SSL Certificates in Non-Browser Software." *Proc. ACM CCS*, 2012.
-   https://doi.org/10.1145/2382196.2382204
 9. Brubaker, C., Jana, S., Ray, B., Khurshid, S., Shmatikov, V. "Using Frankencerts for Automated Adversarial
-   Testing of Certificate Validation in SSL/TLS Implementations." *IEEE Symposium on Security and Privacy*,
-   2014.
+   Testing of Certificate Validation in SSL/TLS Implementations." *IEEE S&P*, 2014.
 10. Sommer, R., Paxson, V. "Outside the Closed World: On Using Machine Learning for Network Intrusion
-    Detection." *IEEE Symposium on Security and Privacy*, 2010.
+    Detection." *IEEE S&P*, 2010.
 11. Dreger, H., Feldmann, A., Mai, M., Paxson, V., Sommer, R. "Dynamic Application-Layer Protocol Analysis for
     Network Intrusion Detection." *15th USENIX Security Symposium*, 2006.
-    https://www.usenix.org/legacy/events/sec06/tech/full_papers/dreger/dreger.pdf
 12. Li, F., Durumeric, Z., Czyz, J., Karami, M., Bailey, M., McCoy, D., Savage, S., Paxson, V. "You've Got
     Vulnerability: Exploring Effective Vulnerability Notifications." *25th USENIX Security Symposium*, 2016.
-    https://www.usenix.org/system/files/conference/usenixsecurity16/sec16_paper_li.pdf
 13. Anderson, B., Paul, S., McGrew, D. "Deciphering malware's use of TLS (without decryption)." *Journal of
-    Computer Virology and Hacking Techniques*, 2018. https://doi.org/10.1007/s11416-017-0306-6
-14. Jafari Siavoshani, M., et al. "Machine learning interpretability meets TLS fingerprinting." *Soft
-    Computing* 27(11), 2023, 7191–7208.
-15. Chen, T., Guestrin, C. "XGBoost: A Scalable Tree Boosting System." *Proc. ACM KDD*, 2016.
+    Computer Virology and Hacking Techniques*, 2018.
+14. Jafari Siavoshani, M., et al. "Machine learning interpretability meets TLS fingerprinting." *Soft Computing*
+    27(11), 2023, 7191–7208.
+15. Friedman, J.H. "Greedy Function Approximation: A Gradient Boosting Machine." *Annals of Statistics* 29(5),
+    2001.
 16. Liu, F.T., Ting, K.M., Zhou, Z.-H. "Isolation Forest." *IEEE ICDM*, 2008.
-17. Lundberg, S.M., Lee, S.-I. "A Unified Approach to Interpreting Model Predictions." *NeurIPS*, 2017.
-18. Rousseeuw, P.J., Van Driessen, K. "A Fast Algorithm for the Minimum Covariance Determinant Estimator."
+17. Chen, T., Guestrin, C. "XGBoost: A Scalable Tree Boosting System." *Proc. ACM KDD*, 2016.
+18. Lundberg, S.M., Lee, S.-I. "A Unified Approach to Interpreting Model Predictions." *NeurIPS*, 2017.
+19. Rousseeuw, P.J., Van Driessen, K. "A Fast Algorithm for the Minimum Covariance Determinant Estimator."
     *Technometrics* 41(3), 1999.
 
 ## Preprints
 
-19. Loizou, K., Ghadafi, E. "Measuring Post-Quantum TLS Deployment Across UK Internet Sectors." arXiv
-    2608.02147, August 2026. https://arxiv.org/abs/2608.02147
-20. "Measurement Study of Post-Quantum Readiness of Internet: 2026." arXiv 2606.16473.
-    https://arxiv.org/abs/2606.16473
-21. "Mind the Gap: Policy vs Reality in Post-Quantum TLS Deployment." arXiv 2607.29005.
-    https://arxiv.org/abs/2607.29005
-22. Singh, K., Kashyap, A., Cherukuri, A.K. "Interpretable Anomaly Detection in Encrypted Traffic Using SHAP
-    with Machine Learning Models." arXiv 2505.16261, May 2025. https://arxiv.org/abs/2505.16261
-23. "INTACT: Intent-Aware Representation Learning for Cryptographic Traffic Violation Detection." arXiv
-    2602.21252. https://arxiv.org/abs/2602.21252
+20. Loizou, K., Ghadafi, E. "Measuring Post-Quantum TLS Deployment Across UK Internet Sectors." arXiv
+    2608.02147, 2026. https://arxiv.org/abs/2608.02147
+21. "Measurement Study of Post-Quantum Readiness of Internet: 2026." arXiv 2606.16473.
+22. "Mind the Gap: Policy vs Reality in Post-Quantum TLS Deployment." arXiv 2607.29005.
+23. Singh, K., Kashyap, A., Cherukuri, A.K. "Interpretable Anomaly Detection in Encrypted Traffic Using SHAP
+    with Machine Learning Models." arXiv 2505.16261, 2025.
+24. "INTACT: Intent-Aware Representation Learning for Cryptographic Traffic Violation Detection." arXiv
+    2602.21252.
 
 ## Standards and specifications
 
-24. RFC 3207 — SMTP Service Extension for Secure SMTP over TLS.
-25. RFC 4954 — SMTP Service Extension for Authentication.
-26. RFC 5746 — TLS Renegotiation Indication Extension.
-27. RFC 6176 — Prohibiting Secure Sockets Layer (SSL) Version 2.0.
-28. RFC 7435 — Opportunistic Security: Some Protection Most of the Time.
-29. RFC 7465 — Prohibiting RC4 Cipher Suites.
-30. RFC 7672 — SMTP Security via Opportunistic DANE TLS.
-31. RFC 8314 — Cleartext Considered Obsolete: Use of TLS for Email Submission and Access.
-32. RFC 8446 — The Transport Layer Security (TLS) Protocol Version 1.3.
-33. RFC 8460 — SMTP TLS Reporting.
-34. RFC 8461 — SMTP MTA Strict Transport Security (MTA-STS).
-35. RFC 8996 — Deprecating TLS 1.0 and TLS 1.1.
-36. RFC 9325 — Recommendations for Secure Use of TLS and DTLS.
-37. NIST SP 800-52 Rev 2 — Guidelines for the Selection, Configuration and Use of TLS Implementations.
-38. NIST SP 800-45 Ver 2 — Guidelines on Electronic Mail Security.
-39. NIST IR 8547 — Transition to Post-Quantum Cryptography Standards.
-    https://nvlpubs.nist.gov/nistpubs/ir/2024/NIST.IR.8547.ipd.pdf
-40. NIST FIPS 203 — Module-Lattice-Based Key-Encapsulation Mechanism Standard (ML-KEM).
-41. CycloneDX Cryptography Bill of Materials / ECMA-424. https://cyclonedx.org/capabilities/cbom/
+25. RFC 3207 — SMTP Service Extension for Secure SMTP over TLS.
+26. RFC 4954 — SMTP Service Extension for Authentication.
+27. RFC 5746 — TLS Renegotiation Indication Extension.
+28. RFC 6176 — Prohibiting SSL Version 2.0.
+29. RFC 7435 — Opportunistic Security: Some Protection Most of the Time.
+30. RFC 7465 — Prohibiting RC4 Cipher Suites.
+31. RFC 7672 — SMTP Security via Opportunistic DANE TLS.
+32. RFC 8314 — Cleartext Considered Obsolete: Use of TLS for Email Submission and Access.
+33. RFC 8446 — The Transport Layer Security (TLS) Protocol Version 1.3.
+34. RFC 8460 — SMTP TLS Reporting.
+35. RFC 8461 — SMTP MTA Strict Transport Security (MTA-STS).
+36. RFC 8996 — Deprecating TLS 1.0 and TLS 1.1.
+37. RFC 9325 — Recommendations for Secure Use of TLS and DTLS.
+38. NIST SP 800-52 Rev 2 — Guidelines for the Selection, Configuration and Use of TLS Implementations.
+39. NIST SP 800-45 Ver 2 — Guidelines on Electronic Mail Security.
+40. NIST IR 8547 — Transition to Post-Quantum Cryptography Standards.
+41. NIST FIPS 203 — Module-Lattice-Based Key-Encapsulation Mechanism Standard (ML-KEM).
+42. CycloneDX Cryptography Bill of Materials / ECMA-424.
+43. ArcSight Common Event Format (CEF); Elastic Common Schema (ECS).
 
 ## Indian policy and law
 
-42. Information Technology Act, 2000, section 70B.
-43. CERT-In Directions under section 70B(6), 28 April 2022 — six-hour incident reporting, 180-day log
-    retention.
-44. CERT-In, *Guidelines on Information Security Practices for Government Entities*, 30 June 2023.
-    https://www.cert-in.org.in/PDF/guidelinesgovtentities.pdf
-45. Ministry of Electronics and Information Technology, *E-mail Policy of the Government of India*.
-    https://www.meity.gov.in/static/uploads/2024/02/E-mail_policy_of_Government_of_India_3-2.pdf
-46. Digital Personal Data Protection Act, 2023.
-47. Digital Personal Data Protection Rules, 2025, notified 13 November 2025.
-    https://static.pib.gov.in/WriteReadData/specificdocs/documents/2025/nov/doc20251117695301.pdf
-48. Bharatiya Sakshya Adhiniyam, 2023, section 63. https://indiankanoon.org/doc/125020475/
-49. SEBI, *Cybersecurity and Cyber Resilience Framework (CSCRF) for SEBI Regulated Entities*, 20 August 2024.
-50. MeitY / CERT-In / SISA, *Transitioning to Quantum Cyber Readiness*, July 2025.
-51. Department of Science and Technology, National Quantum Mission task force, *India's Post-Quantum
-    Cryptography Migration Roadmap*, February 2026. Summary:
-    https://www.orfonline.org/expert-speak/india-s-post-quantum-cryptography-migration-roadmap
-52. CERT-In, *Annual Report 2025*. https://www.cert-in.org.in/s2cMainServlet?pageid=PUBANULREPRT
+44. Information Technology Act, 2000, section 70B.
+45. CERT-In Directions under section 70B(6), 28 April 2022 — six-hour incident reporting, 180-day log retention.
+46. CERT-In, *Guidelines on Information Security Practices for Government Entities*, 30 June 2023.
+47. MeitY, *E-mail Policy of the Government of India*.
+48. Digital Personal Data Protection Act, 2023; DPDP Rules, 2025 (notified 13 November 2025).
+49. Bharatiya Sakshya Adhiniyam, 2023, section 63.
+50. SEBI, *Cybersecurity and Cyber Resilience Framework (CSCRF)*, 20 August 2024.
+51. MeitY / CERT-In / SISA, *Transitioning to Quantum Cyber Readiness*, July 2025.
+52. Department of Science and Technology, National Quantum Mission task force, *India's Post-Quantum
+    Cryptography Migration Roadmap*, February 2026.
+53. CERT-In, *Annual Report 2025*.
 
 ## Reports and datasets
 
-53. Federal Bureau of Investigation, Internet Crime Complaint Center, *2025 Internet Crime Report*.
-    https://www.ic3.gov/AnnualReport/Reports/2025_IC3Report.pdf
-54. International Telecommunication Union, Goal 9 — Infrastructure, Industrialization, Innovation.
-    https://www.itu.int/en/sustainable-world/Pages/goal9.aspx
-55. Canadian Institute for Cybersecurity, CIC-IDS2017 intrusion detection evaluation dataset.
-    https://www.unb.ca/cic/datasets/ids-2017.html
-56. Suricata public PCAP dataset index. https://docs.suricata.io/en/latest/public-data-sets.html
+54. FBI Internet Crime Complaint Center, *2025 Internet Crime Report*.
+55. International Telecommunication Union, Goal 9 — Infrastructure, Industrialization, Innovation.
+56. Canadian Institute for Cybersecurity, CIC-IDS2017 intrusion detection evaluation dataset.
 57. Market Research Future, *India Email Security Market* (vendor research, cited for market sizing only).
 
 ---
 
-# 19. Appendices
+# Appendices
 
-## Appendix A — Architecture diagrams
-
-**A.1 High-level pipeline**
+## Appendix A — Architecture
 
 ```
-                  ┌─────────────────────────────────────────────────────────────┐
-  capture.pcap ──▶│ S0 ingest        SHA-256, frame index                       │
-                  │ S1 reassembly    streams + byte→frame provenance            │
-                  │ S2 protocol ID   SMTP/IMAP/POP3 by banner; port role        │
-                  │ S3 STARTTLS      ten checks over the plaintext phase        │
-                  │ S4 TLS           records, handshake, JA3/JA3S, PQ groups    │
-                  │ S5 X.509         DER parse, chain, RSA signature verify     │
-                  │ S6 rules         34 rules × 10 categories + severity policy │
-                  │ S7 features      51 fields per session                      │
-                  │ S8 AI            risk · anomaly · priority                  │
-                  │ S9 aggregate     category → host → fleet, grades A+…F, ?     │
-                  │ S10 report       JSON · self-contained HTML · PDF           │
-                  └─────────────────────────────────────────────────────────────┘
+  capture.pcap
+      |
+      v
+  S0  ingest .............. 7 link-layer encapsulations, SHA-256, frame index
+  S1  reassembly .......... TCP streams + byte->frame provenance map
+  S2  protocol ID ......... SMTP/IMAP/POP3 by banner; port role assigned
+  S3  STARTTLS ............ ten checks over the plaintext phase
+  S4  TLS ................. records, handshake, JA3/JA3S, PQ groups
+  S5  X.509 ............... DER parse, chain build, RSA signature verify
+  S6  rules ............... 34 rules x 10 categories + role-aware severity
+  S7  features ............ 51 fields per session
+  S8  AI .................. GBT risk + isolation forest + priority + narrative
+  S9  aggregate ........... host/fleet grades A+..F or ?, attack matrix, drift
+  S10 report .............. JSON | self-contained HTML | CEF | ECS | console
 ```
 
-**A.2 Evidence flow** — Every finding references `(capture SHA-256, stream index, frame numbers, byte offsets)`.
-The provenance map built at S1 is what makes the last two resolvable, and it is why S1 cannot be replaced with a
-stock reassembler.
+Every finding references `(capture SHA-256, stream id, frame numbers, byte range, direction, timestamp)`. The
+provenance map built at S1 is what makes the last four resolvable.
 
 ## Appendix B — Report structure (JSON)
 
 Top-level keys: `schema_version`, `capture`, `sessions`, `hosts`, `fleet`, `prioritised_findings`,
-`executive_summary`, `generated_at`, `evaluation_metrics`.
-
-`fleet` carries `score`, `grade`, `host_count`, `session_count` and `category_scores`, where each category score
-reports `category`, `score`, `finding_count` and `worst_severity`. JSON Schema and TypeScript definitions are
-generated from the dataclasses by `python -m schema.jsonschema`, so the contract cannot drift from the code.
+`executive_summary`, `generated_at`, `evaluation_metrics`. `fleet` carries `score`, `grade`, `host_count`,
+`session_count` and `category_scores`. JSON Schema and TypeScript definitions are generated from the dataclasses
+by `python -m schema.jsonschema`, so the contract cannot drift from the code.
 
 ## Appendix C — Rule catalogue (34 rules)
 
@@ -1306,17 +1455,13 @@ generated from the dataclasses by `python -m schema.jsonschema`, so the contract
 
 Base severity is what the rule emits; the role-aware policy then adjusts it and records the justification.
 
-**Severity policy entries** are keyed on `(category, port role)` and currently cover: certificate findings on
-relay, submission and access; configuration findings on relay; STARTTLS findings on submission and access; and
-attack-evidence findings on submission and access.
-
 ## Appendix D — The 51-field feature vector
 
 | Group | Fields |
 |---|---|
 | Protocol version (3) | `tls_version_num`, `is_deprecated_version`, `version_downgrade_from_offered` |
 | Cipher (7) | `cipher_strength_bits`, `cipher_is_aead`, `cipher_is_cbc`, `cipher_is_rc4`, `cipher_is_3des`, `cipher_is_null_or_anon`, `cipher_is_export` |
-| Key exchange (5) | `kex_is_ephemeral`, `kex_is_anon`, `kex_group_bits`, `has_forward_secrecy`, (with PQ below) |
+| Key exchange (4) | `kex_is_ephemeral`, `kex_is_anon`, `kex_group_bits`, `has_forward_secrecy` |
 | Post-quantum (2) | `pq_hybrid_offered`, `pq_hybrid_negotiated` |
 | Certificate (11) | `cert_present`, `cert_opaque_tls13`, `cert_days_to_expiry`, `cert_is_expired`, `cert_is_self_signed`, `cert_key_bits`, `cert_key_is_rsa`, `cert_sig_is_weak`, `cert_chain_length`, `cert_chain_complete`, `cert_hostname_match` |
 | Port role (3) | `port_role_is_relay`, `port_role_is_submission`, `port_role_is_access` |
@@ -1329,39 +1474,71 @@ attack-evidence findings on submission and access.
 The same vector is the input to the rule predicates and to the classifier, which is what prevents the
 machine-learning labelling oracle from diverging from the shipping detector (ADR-0003).
 
-## Appendix E — Evaluation protocol
+## Appendix E — Evaluation protocol and results
 
-**Corpus.** 18 captures generated by `testbed/synth.py` against certificates from `testbed/certgen.py`, with
-expected findings declared per capture in `testbed/manifest.json`.
+**Corpus.** Captures generated by `testbed/synth.py` against certificates from `testbed/certgen.py`, with
+expected findings declared per capture in `testbed/manifest.json` and derived by reading the generator, never
+from tool output. `testbed/relink.py` produces seven link-layer variants.
 
 **Procedure.** For each capture, run the pipeline and compare produced findings against declared findings by
 rule identifier. Classify each as true positive, false positive, false negative, or *insufficient evidence*
-where the rule could not fire because the required material was encrypted. Report precision, recall and F1 per
-rule and in aggregate.
+where the rule could not fire because the required material was encrypted.
 
-**Scope statement to accompany any figure.** The corpus is ours, so the result measures implementation
-correctness against declared intent, not field accuracy. Field accuracy requires labelled real-world captures,
-which do not publicly exist.
+**Results.** 14/14 captures exact; 20/20 rules exercised without error; TP 30, FP 0, FN 0; precision 1.00,
+recall 1.00, F1 1.00; severity accuracy 1.00; protocol identification accuracy 1.00; throughput 0.05 MB/s.
 
-**Independent check.** Compare the S4/S5 parse against `tshark` on the same capture, field by field.
+**Required framing.** *"No disagreement with independently-derived ground truth on a synthetic corpus"* — not
+perfection, and not field accuracy.
 
-**Current status.** Not yet run; `scripts/evaluate.py` raises `NotImplementedError`.
+**Model results.** Corpus 10,000 × 55 with `archetype` excluded as leakage; 8,000/2,000 split; GBT 200 trees
+depth 3 in 12.0 s; baseline MAE 0.1681, model MAE 0.0451 (73% better), R² 0.9429, Spearman 0.9225; isolation
+forest 150 trees over 256-row subsamples in 2.4 s, threshold 0.5856, flagging 99/2,000 (5.0%).
 
-## Appendix F — Risk register
+## Appendix F — Decision record index
 
-See §15 for the full table. The single entry that should be treated as a submission blocker is the absence of
-measured precision and recall, because it is the only risk whose mitigation is fully scoped, cheap, and
-currently unstarted.
+Thirty-two ADRs are maintained in `docs/04_DECISIONS.md`. Those most load-bearing for this paper:
+
+| ADR | Decision |
+|---|---|
+| 0002 | `dpkt` plus a custom parser, not `pyshark`/`tshark` at runtime |
+| 0003 | The rule engine is the labelling oracle for supervised ML |
+| 0004 | Evidence references are born with the data, not added later |
+| 0006 | ML trains on synthetic feature vectors; PCAPs are for validation and demo |
+| 0009 | The schema package has zero dependencies |
+| 0010 | Certificate findings are split into trust and strength |
+| 0012 | Smart App Control confirmed blocking numpy |
+| 0014 | Unanalysed is reported as unknown, never as clean |
+| 0015 | Cipher properties derived from IANA names, not tabulated |
+| 0017 | X.509 parsed in pure Python |
+| 0018 | The dashboard is a single self-contained HTML file |
+| 0019 | The anomaly baseline rejects contaminated sessions before learning |
+| 0020 | Corpus split shuffles indices together |
+| 0021 | Flask, not FastAPI; stdlib sqlite3 for persistence |
+| 0023 | The cipher intersection anomaly requires corroboration |
+| 0024 | Real authentication after all, stdlib only |
+| 0026 | The console: no geographic threat map |
+| 0027 | Link-layer decoding, and never letting an unreadable capture read as clean |
+| 0028 | The narrative layer is verified, not trusted |
+| 0029 | Drift refuses to compare estates that are not the same estate |
+| 0030 | The attack matrix is worth more for what it rules out |
+| 0031 | Train the model locally, in pure Python |
 
 ---
 
 ## Document notes
 
-**Placeholders to fill:** `[TEAM NAME]`, `[TEAM ID]`, and the member list if the template requires one.
+**Placeholders to fill:** `[TEAM NAME]`, `[TEAM ID]`.
 
-**Two discrepancies found while writing this document**, both worth fixing in the repository:
+**Naming.** This document uses **CyberKavach**. The code, README and most other documents use
+**SecureMailScope**; the console wordmark says **Kavach**. The conflict is recorded as unresolved in
+`CLAUDE.md` and should be settled before submission — the UI half is a single configuration value
+(`app.config["BRAND"]` or `SMS_BRAND`), the documentation half is a decision.
 
-1. `CLAUDE.md` and several documents state **33 rules**. The rule pack contains **34** (`len(pack.RULES) == 34`).
-   This document uses 34.
-2. `CLAUDE.md` attributes arXiv 2606.16473 to authors I could not confirm; it is cited here by title and
-   identifier.
+**Reproducing every number in this paper:**
+
+```
+python testbed/certgen.py && python testbed/synth.py && python testbed/relink.py
+python scripts/train_local.py      # §5 figures
+python scripts/evaluate.py         # §6.3 figures
+python scripts/audit.py            # §6.4 figures
+```

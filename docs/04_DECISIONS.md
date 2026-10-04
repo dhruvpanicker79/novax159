@@ -372,40 +372,6 @@ pinned by tests.
 
 ---
 
-## ADR-0019 — The research paper gets its own renderer, not a flag on `md_to_pdf.py`
-
-**Date:** 2026-09-27 · **Status:** Accepted
-
-**Context.** The submitted research document has to match the format the reference SIH research papers use —
-a LaTeX `article` look: Times serif throughout, a title page carrying the abstract and keywords, a generated
-table of contents with dotted leaders and real page numbers, a running header, centred page numbers.
-`scripts/md_to_pdf.py` produces a deliberately different thing: a sans face, coloured headings, a band across
-the top. That is right for the working documents and wrong for a paper. Neither can be the other with a
-stylesheet swap, because the paper also needs a two-pass build (a table of contents cannot know page numbers
-until the document has been laid out once) and a different document template class.
-
-**Decision.** `scripts/md_to_paper.py` is a separate entry point. It imports `md_to_pdf` — which is also what
-installs the PIL stub (ADR-0012) — and reuses `inline()`, `_table()` and the font discovery, then overrides the
-styles, swaps `SimpleDocTemplate` for a `BaseDocTemplate` with `multiBuild` and an `afterFlowable` hook that
-notifies each heading's page, and adds title-page and front-matter handling.
-
-**Rejected.** A `--style paper` flag on `md_to_pdf.py` — the two differ in document class, build method and
-front-matter handling, so the flag would have branched most of the module. Generating LaTeX and compiling it —
-no TeX distribution on these machines, which is the same constraint that produced the renderer in the first
-place. Hand-formatting in Word — the document changes every time the code does, and a format that cannot be
-regenerated from Markdown will silently go stale.
-
-**Consequence.** `python scripts/md_to_paper.py docs/10_RESEARCH_PAPER.md --out out/` regenerates the paper
-after any edit. The source of truth stays Markdown in git. The two renderers share the parts that are genuinely
-shared and nothing else.
-
-**Note for whoever touches it next:** the abstract handler folds hard-wrapped source lines back into paragraphs.
-A first cut emitted one `Paragraph` per source line, which justified each line separately and left orphan words
-("can", "been", "payload,") stranded on their own lines. It looked broken and the text extraction did not show
-it — it was only visible by rendering the page and looking at it.
-
----
-
 ## ADR-0019 — The anomaly baseline rejects contaminated sessions before learning
 
 **Date:** 2026-09-28 · **Status:** Accepted
@@ -1059,3 +1025,37 @@ that can fail on someone else's network). Pickle or joblib for the model file (b
 JSON is 674 KB and readable). Implementing full TreeSHAP (path decomposition is exact for this and an
 order of magnitude simpler). Deleting the notebook — it stays as a cross-check, now clearly marked
 optional.
+
+---
+
+## ADR-0032 — The research paper gets its own renderer, not a flag on `md_to_pdf.py`
+
+**Date:** 2026-09-27 · **Status:** Accepted
+
+**Context.** The submitted research document has to match the format the reference SIH research papers use —
+a LaTeX `article` look: Times serif throughout, a title page carrying the abstract and keywords, a generated
+table of contents with dotted leaders and real page numbers, a running header, centred page numbers.
+`scripts/md_to_pdf.py` produces a deliberately different thing: a sans face, coloured headings, a band across
+the top. That is right for the working documents and wrong for a paper. Neither can be the other with a
+stylesheet swap, because the paper also needs a two-pass build (a table of contents cannot know page numbers
+until the document has been laid out once) and a different document template class.
+
+**Decision.** `scripts/md_to_paper.py` is a separate entry point. It imports `md_to_pdf` — which is also what
+installs the PIL stub (ADR-0012) — and reuses `inline()`, `_table()` and the font discovery, then overrides the
+styles, swaps `SimpleDocTemplate` for a `BaseDocTemplate` with `multiBuild` and an `afterFlowable` hook that
+notifies each heading's page, and adds title-page and front-matter handling.
+
+**Rejected.** A `--style paper` flag on `md_to_pdf.py` — the two differ in document class, build method and
+front-matter handling, so the flag would have branched most of the module. Generating LaTeX and compiling it —
+no TeX distribution on these machines, which is the same constraint that produced the renderer in the first
+place. Hand-formatting in Word — the document changes every time the code does, and a format that cannot be
+regenerated from Markdown will silently go stale.
+
+**Consequence.** `python scripts/md_to_paper.py docs/10_RESEARCH_PAPER.md --out out/` regenerates the paper
+after any edit. The source of truth stays Markdown in git. The two renderers share the parts that are genuinely
+shared and nothing else.
+
+**Note for whoever touches it next:** the abstract handler folds hard-wrapped source lines back into paragraphs.
+A first cut emitted one `Paragraph` per source line, which justified each line separately and left orphan words
+("can", "been", "payload,") stranded on their own lines. It looked broken and the text extraction did not show
+it — it was only visible by rendering the page and looking at it.

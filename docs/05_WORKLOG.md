@@ -393,7 +393,7 @@ evaluators will find them anyway.
 ## 2026-09-27 (evening) — paper formatting (`scripts/md_to_paper.py`)
 
 **Done:** new renderer that puts the research document in the same format as the reference SIH research papers
-(ITerative Bytes, SIH25002). ADR-0019 records why it is a separate script rather than a flag.
+(ITerative Bytes, SIH25002). ADR-0032 records why it is a separate script rather than a flag.
 
 - **Times New Roman throughout**, registered as a TrueType family so the em dash, rupee sign and arrows render;
   falls back to built-in Times and degrades those characters, as `md_to_pdf.py` already does.
@@ -1065,3 +1065,40 @@ runs `scripts/audit.py` and two test suites as a build step. A build that produc
 fails there rather than in front of a judge.
 
 **Next:** USP-11 is the only unbuilt deliverable, D20's PDF needs Playwright, and the deck is unstarted.
+
+---
+
+## 2026-10-03 — research paper rewritten against the current system
+
+`docs/10_RESEARCH_PAPER.md` was written when the project was 13,300 lines with 168 tests, no trained model and
+`evaluate.py` a stub. Everything in it about our own system was stale. Rewritten end to end: **39 pages, ~14,500
+words**, rendered with `scripts/md_to_paper.py`.
+
+**Every number re-derived by running the code, not from notes:**
+- `scripts/audit.py` → 32 met, 1 partial (D20, PDF export), 1 not met (USP-11)
+- `scripts/evaluate.py` → 14/14 captures exact, 20/20 rules, TP 30 / FP 0 / FN 0, precision 1.00, recall 1.00,
+  F1 1.00, severity accuracy 1.00, protocol id accuracy 1.00, **throughput 0.05 MB/s**
+- `scripts/train_local.py` → corpus 10,000 × 55, `archetype` excluded as leakage, 8,000/2,000 split; GBT 200
+  trees depth 3 in 12.0 s, baseline MAE 0.1681 → model 0.0451 (73% better), R² 0.9429, **Spearman 0.9225**;
+  isolation forest 150 trees / 256-row subsamples in 2.4 s, threshold 0.5856, flagging 99/2000 (5.0%)
+- `attacks.REGISTRY` → the 16 attack names and three verdicts, listed in full
+- The rule catalogue, the 51 features, the five store tables and the two SIEM formats, all read from the code
+
+**Section 5 is new and is the whole ML layer in full** — why we wrote GBT and isolation forest ourselves, the
+leakage exclusion, the shuffle bug that ADR-0020 exists because of, the feature importances, and the fact that
+the trainer refuses to write a model that loses to the baseline. The feature importances are worth reading: the
+model independently concentrates on key-exchange strength and certificate lifecycle, which is where the
+measurement literature says the weaknesses are.
+
+**Throughput of 0.05 MB/s is now stated in the paper**, in §6.3 and again in §17.1. It is a real limitation and
+omitting it would have been the kind of thing a judge finds.
+
+**§17 is a limitations section, not a future-work section.** Seven named limitations, including that every
+capture is synthetic and that the scoring curve lets a cleartext relay reach A+ — recorded as a deliberate open
+decision rather than quietly adjusted, because changing a score to win an argument is how a scoring system stops
+meaning anything.
+
+**Defect found and fixed: two ADRs were both numbered 0019.** The renderer ADR (written 27 Sep) collided with
+the anomaly-baseline ADR. The anomaly one is referenced from `ml/train.py` and `pipeline.py`, so the renderer
+ADR was renumbered to **ADR-0032** and moved to the end; the single worklog reference was updated. 32 ADRs, no
+duplicates.
